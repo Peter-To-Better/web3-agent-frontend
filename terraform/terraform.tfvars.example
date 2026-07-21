@@ -1,0 +1,4 @@
+aws_region        = "ap-northeast-1"
+key_name          = "my-ec2-keypair"
+allowed_ssh_cidrs = ["203.0.113.10/32"]
+domain_name       = "chat.example.com"

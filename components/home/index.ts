@@ -1,0 +1,9 @@
+export { Hero } from "./hero";
+export { TickerTape } from "./ticker-tape";
+export { StatsBar } from "./stats-bar";
+export { CapabilitiesSection } from "./capabilities-section";
+export { BigStatSection } from "./big-stat-section";
+export { SloganSection } from "./slogan-section";
+export { HowItWorksSection } from "./how-it-works-section";
+export { ChatPreviewSection } from "./chat-preview-section";
+export { CtaSection } from "./cta-section";

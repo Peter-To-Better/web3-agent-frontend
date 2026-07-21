@@ -20,6 +20,35 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## 使用 Docker 啟動
+
+專案已內建 `Dockerfile`（multi-stage build，產出 Next.js standalone image）與 `docker-compose.yml`。
+
+### 方式一：Docker Compose（推薦）
+
+```bash
+cp .env.example .env
+# 編輯 .env，填入 BACKEND_URL 指向你的真實後端；留空則使用 app/api/chat/* 內建的假資料
+
+docker compose up -d --build
+docker compose logs -f web
+```
+
+啟動後開 [http://localhost:3000](http://localhost:3000) 確認。停止服務用 `docker compose down`。
+
+### 方式二：純 Docker
+
+```bash
+docker build -t hoya-bit-frontend .
+docker run --rm -p 3000:3000 \
+  -e BACKEND_URL=http://your-backend:8080 \
+  hoya-bit-frontend
+```
+
+`BACKEND_URL` 未設定時，`/api/chat/stream`、`/api/chat/history` 會回傳內建的 mock 資料，方便在沒有後端的情況下先驗證前端。
+
+完整的 AWS EC2 + Nginx + TLS 部署流程請參考 [DEPLOY.md](./DEPLOY.md)。
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -34,28 +34,53 @@ function valueToAngle(value: number) {
 
 interface SentimentGaugeProps {
   reading: GaugeReading;
+  /**
+   * Reveal the needle via a scroll-triggered entrance animation, once.
+   * Set false for a widget whose `reading.value` keeps changing after mount
+   * (e.g. a polled live dashboard) — every value change then tweens the
+   * needle immediately instead of waiting for a scroll crossing that, for an
+   * already-visible element, never fires again after the first time.
+   */
+  animateOnScroll?: boolean;
 }
 
-export function SentimentGauge({ reading }: SentimentGaugeProps) {
+export function SentimentGauge({ reading, animateOnScroll = true }: SentimentGaugeProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const needleRef = useRef<SVGLineElement>(null);
-  const valueRef = useRef<SVGTextElement>(null);
+  const currentValueRef = useRef(0);
   const zoneArcs = Array.from({ length: 5 }, (_, i) => describeArc(CX, CY, RADIUS, 180 - i * 36, 180 - (i + 1) * 36));
   const activeZoneIndex = Math.min(4, Math.floor(reading.value / 20));
   const delta = reading.value - reading.previousValue;
 
   useGSAP(
     () => {
+      // Only the needle sweep is driven imperatively by GSAP — the numeric
+      // readout is plain React JSX below, so it's guaranteed to reflect
+      // `reading.value` on every render regardless of GSAP/useGSAP's own
+      // tween-cleanup timing (its cleanup between dependency changes isn't
+      // as strict as a plain useEffect's, so imperative DOM writes for
+      // data-critical text aren't safe to rely on here).
       const setNeedle = (value: number) => {
         const { x, y } = polarToCartesian(CX, CY, NEEDLE_LENGTH, valueToAngle(value));
         needleRef.current?.setAttribute("x2", String(x));
         needleRef.current?.setAttribute("y2", String(y));
-        if (valueRef.current) valueRef.current.textContent = value.toFixed(1);
+        currentValueRef.current = value;
       };
 
       if (prefersReducedMotion()) {
         setNeedle(reading.value);
         return;
+      }
+
+      if (!animateOnScroll) {
+        const proxy = { value: currentValueRef.current };
+        const tween = gsap.to(proxy, {
+          value: reading.value,
+          duration: 0.8,
+          ease: "power2.out",
+          onUpdate: () => setNeedle(proxy.value),
+        });
+        return () => tween.kill();
       }
 
       setNeedle(0);
@@ -81,7 +106,7 @@ export function SentimentGauge({ reading }: SentimentGaugeProps) {
         tween.kill();
       };
     },
-    { scope: rootRef, dependencies: [reading.value] }
+    { scope: rootRef, dependencies: [reading.value, animateOnScroll] }
   );
 
   return (
@@ -100,15 +125,8 @@ export function SentimentGauge({ reading }: SentimentGaugeProps) {
           ))}
           <circle cx={CX} cy={CY} r="5" fill="var(--color-ink-accent)" />
           <line ref={needleRef} x1={CX} y1={CY} x2={CX - NEEDLE_LENGTH} y2={CY} stroke="var(--color-ink-accent)" strokeWidth="3" strokeLinecap="round" />
-          <text
-            ref={valueRef}
-            x={CX}
-            y={CY - 8}
-            textAnchor="middle"
-            className="font-mono text-[26px] font-bold"
-            fill="var(--color-ink-fg)"
-          >
-            0.0
+          <text x={CX} y={CY - 8} textAnchor="middle" className="font-mono text-[26px] font-bold" fill="var(--color-ink-fg)">
+            {reading.value.toFixed(1)}
           </text>
         </svg>
         <div className="mt-1 flex justify-between font-mono text-[10px]">

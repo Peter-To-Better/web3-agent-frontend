@@ -24,12 +24,24 @@ function errorStream(message: string): ReadableStream<Uint8Array> {
   });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 /**
  * agentcore_stream_proxy.mjs pipes the AgentCore response through verbatim.
  * Each SSE `data:` line is a JSON string that itself contains a JSON event
  * object (double-encoded), shaped like:
- *   { event: "stage"|"report_delta"|"final"|"error", stage, text,
- *     reference_ids, references, error_code, error_message }
+ *   { event: "stage"|"stage_result"|"report_delta"|"final"|"error", stage,
+ *     text, data, reference_ids, references, citation_units,
+ *     data_limitations, error_code, error_message }
+ * `stage` is a lightweight "this stage is now running" ping; `stage_result`
+ * is that stage's completed decision summary (e.g. which dimensions the
+ * agent planned to research, how many sources passed verification).
+ * `report_delta.data.section` tags which report section a chunk belongs to
+ * — sections are generated in parallel upstream, but deltas are still sent
+ * in final section order, so the frontend can just concatenate per-section
+ * text in arrival order.
  * This re-frames that into the single-encoded `{event,text|message}`
  * protocol lib/api/sse.ts expects, so the upstream's exact shape is
  * isolated to this one function.
@@ -65,16 +77,27 @@ function normalizeAgentStream(upstream: Response): ReadableStream<Uint8Array> {
               controller.enqueue(eventFrame("stage", { text: event.text }));
             }
             break;
-          case "report_delta":
+          case "stage_result":
+            if (typeof event.text === "string") {
+              controller.enqueue(eventFrame("stage_result", { text: event.text }));
+            }
+            break;
+          case "report_delta": {
+            const section = isRecord(event.data) && typeof event.data.section === "string" ? event.data.section : undefined;
             controller.enqueue(
-              eventFrame("delta", { text: typeof event.text === "string" ? event.text : "" })
+              eventFrame("delta", { text: typeof event.text === "string" ? event.text : "", section })
             );
             break;
-          case "final":
+          }
+          case "final": {
+            const dataLimitation = Array.isArray(event.data_limitations)
+              ? event.data_limitations.find((s): s is string => typeof s === "string")
+              : undefined;
             controller.enqueue(
-              eventFrame("final", { text: typeof event.text === "string" ? event.text : "" })
+              eventFrame("final", { text: typeof event.text === "string" ? event.text : "", dataLimitation })
             );
             break;
+          }
           case "error":
             console.error("AgentCore stream error event", {
               code: event.error_code,

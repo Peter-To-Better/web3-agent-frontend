@@ -124,9 +124,12 @@ const AGENT_VERIFY_TOKEN_HEADER = "X-Agent-Verify-Token";
 export interface ChatStreamCallbacks {
   /** Live progress narration (e.g. "searching sources...") — not part of the answer text. */
   onStage?: (text: string) => void;
-  onDelta: (deltaText: string) => void;
-  /** Authoritative full answer text; when received it replaces (not appends to) accumulated deltas. */
-  onFinal?: (fullText: string) => void;
+  /** A completed stage's LLM decision summary (e.g. "found 8 sources, 4 passed verification") — logged as a trace, not part of the answer text. */
+  onStageResult?: (text: string) => void;
+  /** `section` tags which report section this chunk belongs to, when the upstream sends one. */
+  onDelta: (deltaText: string, section?: string) => void;
+  /** Authoritative full answer text; when received it replaces (not appends to) accumulated deltas. `dataLimitation` is at most one short caveat about the analysis. */
+  onFinal?: (fullText: string, dataLimitation?: string) => void;
   onDone?: () => void;
   onError?: (error: Error) => void;
 }
@@ -135,7 +138,8 @@ export interface ChatStreamCallbacks {
  * Streams one chat turn from same-origin `/api/chat/stream`, which proxies
  * to the real backend (see app/api/chat/stream/route.ts). The route
  * normalizes whatever the upstream agent sends into a single-encoded JSON
- * frame per SSE event: `{ "event": "stage" | "delta" | "final" | "error", "text"?: "...", "message"?: "..." }`.
+ * frame per SSE event: `{ "event": "stage" | "stage_result" | "delta" | "final" | "error",
+ * "text"?: "...", "section"?: "...", "dataLimitation"?: "...", "message"?: "..." }`.
  */
 export function streamChatMessage(
   message: string,
@@ -163,11 +167,19 @@ export function streamChatMessage(
         case "stage":
           if (typeof parsed.text === "string") callbacks.onStage?.(parsed.text);
           break;
+        case "stage_result":
+          if (typeof parsed.text === "string") callbacks.onStageResult?.(parsed.text);
+          break;
         case "delta":
-          callbacks.onDelta(typeof parsed.text === "string" ? parsed.text : "");
+          callbacks.onDelta(
+            typeof parsed.text === "string" ? parsed.text : "",
+            typeof parsed.section === "string" ? parsed.section : undefined
+          );
           break;
         case "final":
-          if (typeof parsed.text === "string") callbacks.onFinal?.(parsed.text);
+          if (typeof parsed.text === "string") {
+            callbacks.onFinal?.(parsed.text, typeof parsed.dataLimitation === "string" ? parsed.dataLimitation : undefined);
+          }
           break;
         case "error":
           callbacks.onError?.(

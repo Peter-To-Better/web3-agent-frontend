@@ -15,6 +15,10 @@ export interface ChatMessage {
   /** RSI + long/short indicator for relatedSymbol, fetched once the answer finishes streaming. */
   marketIndicator?: MarketRankingRow | null;
   marketIndicatorLoading?: boolean;
+  /** Ordered "LLM decision summary" lines from stage_result events — a running trace of what the agent did at each research stage (planning, search, sufficiency check, per-section reporting, ...). */
+  stageLog?: string[];
+  /** At most one short caveat from the final event's data_limitations. */
+  dataLimitation?: string;
 }
 
 export interface MarketRankingRow {

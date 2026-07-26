@@ -14,6 +14,20 @@ function MessageLabel() {
   );
 }
 
+/** Running trace of each research stage's completed decision summary (stage_result events). */
+function StageLog({ lines }: { lines: string[] }) {
+  return (
+    <div className="flex flex-col gap-1 px-1 text-[11px] text-ink-fg-muted">
+      {lines.map((line, i) => (
+        <div key={i} className="flex items-start gap-1.5">
+          <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-ink-fg-muted" />
+          <span>{line}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function markdownComponents(isUser: boolean): Components {
   const inlineCode = isUser
     ? "rounded bg-black/15 px-1 py-0.5 font-mono text-[13px]"
@@ -85,6 +99,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       }`}
     >
       {!isUser && <MessageLabel />}
+      {!isUser && message.stageLog && message.stageLog.length > 0 && <StageLog lines={message.stageLog} />}
       {isPendingFirstToken ? (
         <TypingIndicator text={message.stage} />
       ) : (
@@ -104,6 +119,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           {!isUser && message.streaming && (
             <span className="ml-0.5 inline-block h-[14px] w-[2px] translate-y-0.5 animate-pulse-dot bg-ink-gain" />
           )}
+        </div>
+      )}
+      {!isUser && !message.streaming && message.dataLimitation && (
+        <div className="flex items-start gap-1.5 px-1 text-[11px] text-ink-fg-muted">
+          <span>⚠</span>
+          <span>{message.dataLimitation}</span>
         </div>
       )}
       {!isUser && !message.streaming && message.marketIndicatorLoading && (

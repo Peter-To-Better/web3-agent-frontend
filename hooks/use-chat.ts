@@ -28,6 +28,15 @@ export function useChat() {
   const networkDoneRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // report_delta chunks are tagged with which report section they belong to.
+  // Sections are generated in parallel upstream but still arrive in final
+  // section order, so keeping per-section text and joining in arrival order
+  // is enough to avoid interleaved/garbled output even if that ordering
+  // guarantee ever slips.
+  const sectionOrderRef = useRef<string[]>([]);
+  const sectionTextRef = useRef<Map<string, string>>(new Map());
+  const UNSECTIONED = "__unsectioned__";
+
   const stopTypewriter = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -80,6 +89,8 @@ export function useChat() {
       targetContentRef.current = "";
       revealedLengthRef.current = 0;
       networkDoneRef.current = false;
+      sectionOrderRef.current = [];
+      sectionTextRef.current = new Map();
       stopTypewriter();
 
       setMessages((prev) => [
@@ -92,6 +103,16 @@ export function useChat() {
 
       const controller = new AbortController();
       abortRef.current = controller;
+
+      function appendSectionDelta(deltaText: string, section?: string) {
+        const key = section ?? UNSECTIONED;
+        if (!sectionTextRef.current.has(key)) {
+          sectionTextRef.current.set(key, "");
+          sectionOrderRef.current.push(key);
+        }
+        sectionTextRef.current.set(key, sectionTextRef.current.get(key)! + deltaText);
+        targetContentRef.current = sectionOrderRef.current.map((k) => sectionTextRef.current.get(k)).join("");
+      }
 
       function finishStreaming() {
         setMessages((prev) =>
@@ -131,13 +152,30 @@ export function useChat() {
           onStage: (stage) => {
             setMessages((prev) => prev.map((m) => (m.id === aiMessageId ? { ...m, stage } : m)));
           },
-          onDelta: (delta) => {
-            targetContentRef.current += delta;
+          onStageResult: (text) => {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === aiMessageId ? { ...m, stageLog: [...(m.stageLog ?? []), text] } : m))
+            );
+          },
+          onDelta: (delta, section) => {
+            appendSectionDelta(delta, section);
             ensureTypewriter(aiMessageId, finishStreaming);
           },
-          onFinal: (fullText) => {
+          onFinal: (fullText, dataLimitation) => {
             // Authoritative — replaces whatever deltas accumulated so far.
+            // Applied immediately (not via the typewriter's incremental
+            // reveal): if fullText is shorter than what's already been
+            // revealed from deltas, revealedLengthRef would already sit past
+            // target.length, so the interval's "still revealing" branch
+            // would never re-fire and the stale, longer delta text would
+            // stay on screen forever instead of being corrected.
             targetContentRef.current = fullText;
+            revealedLengthRef.current = fullText.length;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMessageId ? { ...m, content: fullText, ...(dataLimitation ? { dataLimitation } : {}) } : m
+              )
+            );
             ensureTypewriter(aiMessageId, finishStreaming);
           },
           onDone: () => {

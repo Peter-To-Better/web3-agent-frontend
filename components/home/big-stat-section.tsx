@@ -3,19 +3,39 @@
 import { useRef } from "react";
 import Link from "next/link";
 import { gsap, useGSAP, ScrollTrigger, prefersReducedMotion } from "@/lib/gsap";
+import type { FearGreedReading } from "@/lib/types";
 
-export function BigStatSection() {
+const ZONE_COLORS = [
+  "var(--color-ink-loss)",
+  "color-mix(in srgb, var(--color-ink-loss) 60%, var(--color-ink-fg-muted))",
+  "var(--color-ink-fg-muted)",
+  "color-mix(in srgb, var(--color-ink-gain) 60%, var(--color-ink-fg-muted))",
+  "var(--color-ink-gain)",
+];
+
+function colorForValue(value: number): string {
+  return ZONE_COLORS[Math.min(4, Math.floor(Math.max(0, value) / 20))];
+}
+
+interface BigStatSectionProps {
+  reading: FearGreedReading | null;
+}
+
+export function BigStatSection({ reading }: BigStatSectionProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const numberRef = useRef<HTMLSpanElement>(null);
+  const value = reading?.value ?? null;
 
   useGSAP(
     () => {
-      const setNumber = (value: number) => {
-        if (numberRef.current) numberRef.current.textContent = Math.round(value).toString();
+      if (value === null) return;
+
+      const setNumber = (v: number) => {
+        if (numberRef.current) numberRef.current.textContent = Math.round(v).toString();
       };
 
       if (prefersReducedMotion()) {
-        setNumber(68);
+        setNumber(value);
         return;
       }
 
@@ -23,7 +43,7 @@ export function BigStatSection() {
       const proxy = { value: 0 };
 
       const tween = gsap.to(proxy, {
-        value: 68,
+        value,
         duration: 1.4,
         ease: "power2.out",
         paused: true,
@@ -42,7 +62,7 @@ export function BigStatSection() {
         tween.kill();
       };
     },
-    { scope: rootRef }
+    { scope: rootRef, dependencies: [value] }
   );
 
   return (
@@ -52,13 +72,19 @@ export function BigStatSection() {
           即時市場情緒 · 恐懼貪婪指數
         </div>
         <div className="flex items-baseline justify-center gap-2 font-mono">
-          <span ref={numberRef} className="text-[clamp(80px,16vw,180px)] font-black leading-none text-ink-gain">
-            0
+          <span
+            ref={numberRef}
+            className="text-[clamp(80px,16vw,180px)] font-black leading-none"
+            style={{ color: value === null ? "var(--color-ink-fg-muted)" : colorForValue(value) }}
+          >
+            {value === null ? "--" : 0}
           </span>
           <span className="text-[clamp(24px,4vw,40px)] font-bold text-ink-fg-muted">/100</span>
         </div>
         <p className="mx-auto mt-3 max-w-md text-sm text-ink-fg-secondary">
-          市場目前處於「貪婪」區間。想看完整的情緒儀表、RSI 與做多/做空推薦榜？
+          {reading
+            ? `市場目前處於「${reading.classification}」區間。想看完整的情緒儀表、RSI 與做多/做空推薦榜？`
+            : "目前無法取得即時市場情緒資料。想看完整的情緒儀表、RSI 與做多/做空推薦榜？"}
         </p>
         <Link
           href="/dashboard"

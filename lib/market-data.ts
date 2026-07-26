@@ -1,5 +1,5 @@
 import "server-only";
-import type { MarketDashboardData, MarketRankingRow, RecommendationRow } from "@/lib/types";
+import type { MarketDashboardData, MarketRankingRow, RecommendationRow, TickerQuote } from "@/lib/types";
 
 const SPOT_BASE = "https://api.binance.com";
 const FUTURES_BASE = "https://fapi.binance.com";
@@ -234,6 +234,37 @@ export async function getMarketDashboardData(): Promise<MarketDashboardData> {
     previousAverageRsi: average(gainerResults.map((r) => r.previousRsi)),
     updatedAt: new Date().toISOString(),
   };
+}
+
+/** Fixed watchlist for the homepage/dashboard scrolling ticker tape. */
+export const TICKER_TAPE_SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX"] as const;
+
+/**
+ * Price + 24h change for a small fixed set of major coins, in one batched
+ * request — used to seed the ticker tape before its WebSocket ticks take
+ * over. Unlike getMarketDashboardData/getSymbolIndicators this skips RSI/
+ * long-short/POC entirely since the ticker tape never displays them.
+ */
+export async function getTickerSnapshot(
+  baseSymbols: readonly string[] = TICKER_TAPE_SYMBOLS
+): Promise<TickerQuote[]> {
+  const pairs = baseSymbols.map((s) => `${s.toUpperCase()}USDT`);
+  try {
+    const symbolsParam = encodeURIComponent(JSON.stringify(pairs));
+    const rows = await fetchJson<BinanceTicker24hrSingle[]>(
+      `${SPOT_BASE}/api/v3/ticker/24hr?symbols=${symbolsParam}`,
+      30
+    );
+    const bySymbol = new Map(rows.map((r) => [r.symbol, r]));
+    return baseSymbols.flatMap((base) => {
+      const row = bySymbol.get(`${base.toUpperCase()}USDT`);
+      if (!row) return [];
+      return [{ symbol: base.toUpperCase(), price: parseFloat(row.lastPrice), changePct: parseFloat(row.priceChangePercent) }];
+    });
+  } catch (error) {
+    console.error("Ticker snapshot fetch failed", error);
+    return [];
+  }
 }
 
 /**

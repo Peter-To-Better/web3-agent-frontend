@@ -50,3 +50,16 @@ export interface MarketDashboardData {
   previousAverageRsi: number | null;
   updatedAt: string;
 }
+
+export interface TickerQuote {
+  symbol: string;
+  price: number;
+  changePct: number;
+}
+
+export interface FearGreedReading {
+  /** 0-100, from alternative.me's crypto Fear & Greed Index. */
+  value: number;
+  /** Chinese classification label, e.g. "貪婪", "極度恐懼". */
+  classification: string;
+}

@@ -1,23 +1,16 @@
-interface TickerItem {
-  symbol: string;
-  changePct: number;
+"use client";
+
+import { useLivePrices } from "@/hooks/use-live-prices";
+import type { TickerQuote } from "@/lib/types";
+
+interface TickerTapeProps {
+  initialQuotes: TickerQuote[];
 }
 
-const tickerItems: TickerItem[] = [
-  { symbol: "BTC", changePct: 2.4 },
-  { symbol: "ETH", changePct: -0.8 },
-  { symbol: "SOL", changePct: 5.1 },
-  { symbol: "BNB", changePct: 1.2 },
-  { symbol: "XRP", changePct: -1.6 },
-  { symbol: "DOGE", changePct: 3.7 },
-  { symbol: "ADA", changePct: -0.3 },
-  { symbol: "AVAX", changePct: 4.0 },
-];
-
-function TickerRow() {
+function TickerRow({ quotes }: { quotes: TickerQuote[] }) {
   return (
     <>
-      {tickerItems.map((item) => {
+      {quotes.map((item) => {
         const isUp = item.changePct >= 0;
         return (
           <span
@@ -35,12 +28,18 @@ function TickerRow() {
   );
 }
 
-export function TickerTape() {
+export function TickerTape({ initialQuotes }: TickerTapeProps) {
+  const symbols = initialQuotes.map((q) => q.symbol);
+  const live = useLivePrices(symbols);
+  const quotes = initialQuotes.map((q) => (live[q.symbol] ? { ...q, ...live[q.symbol] } : q));
+
+  if (!quotes.length) return null;
+
   return (
     <div className="overflow-hidden border-y border-ink-border bg-ink-surface" aria-hidden>
       <div className="flex w-max animate-ticker-scroll whitespace-nowrap py-2.5">
-        <TickerRow />
-        <TickerRow />
+        <TickerRow quotes={quotes} />
+        <TickerRow quotes={quotes} />
       </div>
     </div>
   );

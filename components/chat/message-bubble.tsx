@@ -1,23 +1,9 @@
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 import type { ChatMessage } from "@/lib/types";
 import { TypingIndicator } from "./typing-indicator";
 import { MarketIndicatorCard } from "./market-indicator-card";
-
-function renderLine(line: string, key: number) {
-  const parts = line.split(/(\*\*.+?\*\*)/g).filter(Boolean);
-  return (
-    <span key={key} className="block">
-      {parts.map((part, i) =>
-        part.startsWith("**") && part.endsWith("**") ? (
-          <strong key={i} className="text-ink-gain">
-            {part.slice(2, -2)}
-          </strong>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </span>
-  );
-}
 
 function MessageLabel() {
   return (
@@ -26,6 +12,62 @@ function MessageLabel() {
       HOYA BIT AI
     </div>
   );
+}
+
+function markdownComponents(isUser: boolean): Components {
+  const inlineCode = isUser
+    ? "rounded bg-black/15 px-1 py-0.5 font-mono text-[13px]"
+    : "rounded bg-ink-elevated px-1 py-0.5 font-mono text-[13px] text-ink-accent";
+  const codeBlock = isUser ? "bg-black/15" : "border border-ink-border bg-ink-elevated";
+  const link = isUser
+    ? "underline underline-offset-2 hover:opacity-80"
+    : "text-ink-accent underline underline-offset-2 hover:opacity-80";
+
+  return {
+    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+    strong: ({ children }) => (
+      <strong className={isUser ? "font-bold" : "font-bold text-ink-gain"}>{children}</strong>
+    ),
+    em: ({ children }) => <em className="italic">{children}</em>,
+    a: ({ children, href }) => (
+      <a href={href} target="_blank" rel="noopener noreferrer" className={link}>
+        {children}
+      </a>
+    ),
+    ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
+    ol: ({ children }) => <ol className="mb-2 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
+    li: ({ children }) => <li>{children}</li>,
+    h1: ({ children }) => <h1 className="mb-2 mt-1 text-base font-bold first:mt-0">{children}</h1>,
+    h2: ({ children }) => <h2 className="mb-2 mt-1 text-[15px] font-bold first:mt-0">{children}</h2>,
+    h3: ({ children }) => <h3 className="mb-1 mt-1 text-sm font-bold first:mt-0">{children}</h3>,
+    blockquote: ({ children }) => (
+      <blockquote className="mb-2 border-l-2 border-ink-border pl-3 text-current/80 last:mb-0">
+        {children}
+      </blockquote>
+    ),
+    hr: () => <hr className="my-3 border-ink-border" />,
+    pre: ({ children }) => (
+      <pre className={`mb-2 overflow-x-auto rounded-lg ${codeBlock} p-3 text-xs last:mb-0`}>
+        {children}
+      </pre>
+    ),
+    code: ({ className, children }) => {
+      const isBlock = /language-/.test(className ?? "");
+      if (isBlock) {
+        return <code className={`font-mono ${className ?? ""}`}>{children}</code>;
+      }
+      return <code className={inlineCode}>{children}</code>;
+    },
+    table: ({ children }) => (
+      <div className="mb-2 overflow-x-auto last:mb-0">
+        <table className="w-full border-collapse text-xs">{children}</table>
+      </div>
+    ),
+    th: ({ children }) => (
+      <th className="border-b border-ink-border px-2 py-1 text-left font-semibold">{children}</th>
+    ),
+    td: ({ children }) => <td className="border-b border-ink-border/60 px-2 py-1 align-top">{children}</td>,
+  };
 }
 
 interface MessageBubbleProps {
@@ -53,7 +95,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               : "rounded-2xl rounded-bl-sm border border-ink-border bg-ink-surface px-[18px] py-3.5 text-sm leading-relaxed text-ink-fg"
           }
         >
-          {message.content.split("\n").map((line, i) => renderLine(line, i))}
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkBreaks]}
+            components={markdownComponents(isUser)}
+          >
+            {message.content}
+          </ReactMarkdown>
           {!isUser && message.streaming && (
             <span className="ml-0.5 inline-block h-[14px] w-[2px] translate-y-0.5 animate-pulse-dot bg-ink-gain" />
           )}

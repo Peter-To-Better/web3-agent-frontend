@@ -1,10 +1,12 @@
 node_modules
 .next
 .git
+.env
 .env*.local
 *.log
 npm-debug.log*
 README.md
 AGENTS.md
 CLAUDE.md
+deploy-ecs.sh
 .DS_Store

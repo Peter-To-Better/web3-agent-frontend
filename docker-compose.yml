@@ -7,8 +7,11 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      # Real backend (e.g. your Rust API). Leave unset to use the built-in
-      # mock responses in app/api/chat/* for local/demo use.
+      # Bedrock AgentCore Lambda Function URL (agentcore_stream_proxy.mjs).
+      # Leave unset to use the built-in mock chat responses.
+      AGENT_FUNCTION_URL: ${AGENT_FUNCTION_URL:-}
+      AGENT_FUNCTION_URL_VERIFY_TOKEN: ${AGENT_FUNCTION_URL_VERIFY_TOKEN:-}
+      # Real backend for endpoints not served by the Lambda above (e.g. chat
+      # history). Leave unset to use the built-in mock chat history.
       BACKEND_URL: ${BACKEND_URL:-}
-      BACKEND_CHAT_STREAM_PATH: ${BACKEND_CHAT_STREAM_PATH:-/chat/stream}
       BACKEND_CHAT_HISTORY_PATH: ${BACKEND_CHAT_HISTORY_PATH:-/chat/history}

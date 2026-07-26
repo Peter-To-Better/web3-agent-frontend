@@ -1,5 +1,6 @@
 import type { ChatMessage } from "@/lib/types";
 import { TypingIndicator } from "./typing-indicator";
+import { MarketIndicatorCard } from "./market-indicator-card";
 
 function renderLine(line: string, key: number) {
   const parts = line.split(/(\*\*.+?\*\*)/g).filter(Boolean);
@@ -43,7 +44,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     >
       {!isUser && <MessageLabel />}
       {isPendingFirstToken ? (
-        <TypingIndicator />
+        <TypingIndicator text={message.stage} />
       ) : (
         <div
           className={
@@ -57,6 +58,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             <span className="ml-0.5 inline-block h-[14px] w-[2px] translate-y-0.5 animate-pulse-dot bg-ink-gain" />
           )}
         </div>
+      )}
+      {!isUser && !message.streaming && message.marketIndicatorLoading && (
+        <span className="px-1 text-[11px] text-ink-fg-muted">
+          正在讀取 {message.relatedSymbol} 即時指標…
+        </span>
+      )}
+      {!isUser && !message.streaming && message.marketIndicator && (
+        <MarketIndicatorCard indicator={message.marketIndicator} />
       )}
     </div>
   );

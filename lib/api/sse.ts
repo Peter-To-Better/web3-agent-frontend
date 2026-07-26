@@ -1,3 +1,5 @@
+import { getAgentVerifyToken } from "@/lib/agent-token";
+
 export interface SSECallbacks {
   onChunk: (data: string, event?: string) => void;
   onDone?: () => void;
@@ -9,7 +11,16 @@ interface StreamSSEOptions extends SSECallbacks {
   body?: unknown;
   signal?: AbortSignal;
   headers?: Record<string, string>;
+  /**
+   * Abort and report a timeout error if no bytes arrive for this long (ms).
+   * Backend proxies occasionally relay an upstream that stops sending
+   * without ever closing the connection — without this, the UI would wait
+   * forever since neither onDone nor onError would ever fire.
+   */
+  idleTimeoutMs?: number;
 }
+
+const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
 
 /**
  * Generic Server-Sent Events consumer built on fetch + ReadableStream
@@ -18,9 +29,30 @@ interface StreamSSEOptions extends SSECallbacks {
  * by blank lines, and treats a literal `data: [DONE]` frame as stream end.
  */
 export async function streamSSE(url: string, options: StreamSSEOptions): Promise<void> {
-  const { method = "POST", body, signal, headers, onChunk, onDone, onError } = options;
+  const {
+    method = "POST",
+    body,
+    signal,
+    headers,
+    onChunk,
+    onDone,
+    onError,
+    idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS,
+  } = options;
+
+  const idleController = new AbortController();
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  const resetIdleTimer = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(
+      () => idleController.abort(new DOMException("串流逾時無回應", "TimeoutError")),
+      idleTimeoutMs
+    );
+  };
+  const fetchSignal = signal ? AbortSignal.any([signal, idleController.signal]) : idleController.signal;
 
   try {
+    resetIdleTimer();
     const response = await fetch(url, {
       method,
       headers: {
@@ -29,7 +61,7 @@ export async function streamSSE(url: string, options: StreamSSEOptions): Promise
         ...headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal,
+      signal: fetchSignal,
     });
 
     if (!response.ok || !response.body) {
@@ -42,6 +74,7 @@ export async function streamSSE(url: string, options: StreamSSEOptions): Promise
 
     while (true) {
       const { done, value } = await reader.read();
+      resetIdleTimer();
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
@@ -60,6 +93,7 @@ export async function streamSSE(url: string, options: StreamSSEOptions): Promise
         const data = dataLines.join("\n");
         if (!data) continue;
         if (data === "[DONE]") {
+          clearTimeout(idleTimer);
           onDone?.();
           return;
         }
@@ -67,8 +101,14 @@ export async function streamSSE(url: string, options: StreamSSEOptions): Promise
       }
     }
 
+    clearTimeout(idleTimer);
     onDone?.();
   } catch (error) {
+    clearTimeout(idleTimer);
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      onError?.(new Error("串流逾時無回應，請重新嘗試。"));
+      return;
+    }
     if (error instanceof DOMException && error.name === "AbortError") return;
     onError?.(error instanceof Error ? error : new Error("串流發生未知錯誤"));
   }
@@ -79,16 +119,23 @@ export interface ChatHistoryTurn {
   content: string;
 }
 
+const AGENT_VERIFY_TOKEN_HEADER = "X-Agent-Verify-Token";
+
 export interface ChatStreamCallbacks {
+  /** Live progress narration (e.g. "searching sources...") — not part of the answer text. */
+  onStage?: (text: string) => void;
   onDelta: (deltaText: string) => void;
+  /** Authoritative full answer text; when received it replaces (not appends to) accumulated deltas. */
+  onFinal?: (fullText: string) => void;
   onDone?: () => void;
   onError?: (error: Error) => void;
 }
 
 /**
  * Streams one chat turn from same-origin `/api/chat/stream`, which proxies
- * to the real backend (see app/api/chat/stream/route.ts). Each SSE frame is
- * expected to be JSON `{ "delta": "..." }`; falls back to raw text if not.
+ * to the real backend (see app/api/chat/stream/route.ts). The route
+ * normalizes whatever the upstream agent sends into a single-encoded JSON
+ * frame per SSE event: `{ "event": "stage" | "delta" | "final" | "error", "text"?: "...", "message"?: "..." }`.
  */
 export function streamChatMessage(
   message: string,
@@ -96,16 +143,39 @@ export function streamChatMessage(
   callbacks: ChatStreamCallbacks,
   signal?: AbortSignal
 ): Promise<void> {
+  const verifyToken = getAgentVerifyToken();
+
   return streamSSE("/api/chat/stream", {
     method: "POST",
     body: { message, history },
     signal,
+    headers: verifyToken ? { [AGENT_VERIFY_TOKEN_HEADER]: verifyToken } : undefined,
     onChunk: (data) => {
+      let parsed: Record<string, unknown>;
       try {
-        const parsed = JSON.parse(data) as { delta?: string };
-        callbacks.onDelta(parsed.delta ?? "");
+        parsed = JSON.parse(data) as Record<string, unknown>;
       } catch {
         callbacks.onDelta(data);
+        return;
+      }
+
+      switch (parsed.event) {
+        case "stage":
+          if (typeof parsed.text === "string") callbacks.onStage?.(parsed.text);
+          break;
+        case "delta":
+          callbacks.onDelta(typeof parsed.text === "string" ? parsed.text : "");
+          break;
+        case "final":
+          if (typeof parsed.text === "string") callbacks.onFinal?.(parsed.text);
+          break;
+        case "error":
+          callbacks.onError?.(
+            new Error(typeof parsed.message === "string" ? parsed.message : "串流發生未知錯誤")
+          );
+          break;
+        default:
+          break;
       }
     },
     onDone: callbacks.onDone,

@@ -1,4 +1,8 @@
-export function TypingIndicator() {
+interface TypingIndicatorProps {
+  text?: string;
+}
+
+export function TypingIndicator({ text = "分析中..." }: TypingIndicatorProps) {
   return (
     <div className="flex items-center gap-2 px-1">
       <div className="flex gap-1">
@@ -10,7 +14,7 @@ export function TypingIndicator() {
           />
         ))}
       </div>
-      <span className="text-xs text-ink-fg-muted">分析中...</span>
+      <span className="text-xs text-ink-fg-muted">{text}</span>
     </div>
   );
 }

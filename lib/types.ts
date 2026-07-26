@@ -8,6 +8,13 @@ export interface ChatMessage {
   role: "user" | "ai";
   content: string;
   streaming?: boolean;
+  /** Live progress narration from the agent (e.g. "searching sources..."), shown before real content arrives. */
+  stage?: string;
+  /** Coin detected from the corresponding question (e.g. "ETH"), if any. */
+  relatedSymbol?: string;
+  /** RSI + long/short indicator for relatedSymbol, fetched once the answer finishes streaming. */
+  marketIndicator?: MarketRankingRow | null;
+  marketIndicatorLoading?: boolean;
 }
 
 export interface MarketRankingRow {

@@ -1,60 +1,46 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { apiGet } from "@/lib/api";
-import type { ChatHistoryItem } from "@/lib/types";
-import { suggestedPrompts } from "@/lib/chat-data";
-import { ChatHistoryList } from "./chat-history-list";
-import { SuggestedPrompts } from "./suggested-prompts";
+import { sidebarPrompts } from "@/lib/chat-data";
 
 interface SidebarProps {
-  onNewChat: () => void;
-  onSelectPrompt: (prompt: string) => void;
+  onPromptSelect: (prompt: string) => void;
 }
 
-export function Sidebar({ onNewChat, onSelectPrompt }: SidebarProps) {
-  const [history, setHistory] = useState<ChatHistoryItem[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    apiGet<ChatHistoryItem[]>("/chat/history")
-      .then((items) => {
-        if (cancelled) return;
-        setHistory(items);
-        setActiveId(items[0]?.id ?? null);
-      })
-      .catch(() => {
-        if (!cancelled) setHistory([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+export function Sidebar({ onPromptSelect }: SidebarProps) {
   return (
     <aside className="hidden w-[260px] flex-col border-r border-ink-border bg-ink-surface md:flex">
-      <div className="border-b border-ink-border p-4">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-ink-fg-muted">
-          對話紀錄
+      <div className="border-b border-ink-border px-4 py-4">
+        <div className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-fg-muted">
+          快速提問
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setActiveId(null);
-            onNewChat();
-          }}
-          className="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-ink-border bg-ink-elevated px-3.5 py-2.5 text-[13px] font-medium text-ink-fg transition-colors hover:border-ink-accent"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="7" x2="7" y2="7" />
-            <line x1="9.5" y1="4.5" x2="9.5" y2="9.5" />
-          </svg>
-          新對話
-        </button>
+        <p className="mt-1.5 text-xs leading-relaxed text-ink-fg-muted">
+          點擊問題填入輸入框，確認後再送出。
+        </p>
       </div>
-      <ChatHistoryList items={history} activeId={activeId} onSelect={setActiveId} />
-      <SuggestedPrompts prompts={suggestedPrompts} onSelect={onSelectPrompt} />
+
+      <div className="flex-1 overflow-y-auto p-2">
+        {sidebarPrompts.map((item, index) => (
+          <button
+            key={item.title}
+            type="button"
+            onClick={() => onPromptSelect(item.prompt)}
+            className="group mb-1 flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-ink-elevated"
+            title={`填入問題：${item.prompt}`}
+          >
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-ink-border text-[10px] font-semibold text-ink-fg-muted transition-colors group-hover:border-ink-accent group-hover:text-ink-accent">
+              {index + 1}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[13px] font-medium text-ink-fg-secondary transition-colors group-hover:text-ink-fg">
+                {item.title}
+              </span>
+              <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-fg-muted">
+                {item.prompt}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
     </aside>
   );
 }

@@ -4,9 +4,107 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const encoder = new TextEncoder();
+const MAX_PROMPT_LENGTH = 4000;
 
 function sseFrame(data: string): Uint8Array {
   return encoder.encode(`data: ${data}\n\n`);
+}
+
+function eventFrame(event: string, fields: Record<string, unknown> = {}): Uint8Array {
+  return sseFrame(JSON.stringify({ event, ...fields }));
+}
+
+function errorStream(message: string): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(eventFrame("error", { message }));
+      controller.enqueue(sseFrame("[DONE]"));
+      controller.close();
+    },
+  });
+}
+
+/**
+ * agentcore_stream_proxy.mjs pipes the AgentCore response through verbatim.
+ * Each SSE `data:` line is a JSON string that itself contains a JSON event
+ * object (double-encoded), shaped like:
+ *   { event: "stage"|"report_delta"|"final"|"error", stage, text,
+ *     reference_ids, references, error_code, error_message }
+ * This re-frames that into the single-encoded `{event,text|message}`
+ * protocol lib/api/sse.ts expects, so the upstream's exact shape is
+ * isolated to this one function.
+ */
+function normalizeAgentStream(upstream: Response): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder();
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = upstream.body!.getReader();
+      let buffer = "";
+
+      function handleFrame(frame: string) {
+        const dataLine = frame.split("\n").find((line) => line.startsWith("data:"));
+        if (!dataLine) return;
+        const raw = dataLine.slice(5).trim();
+        if (!raw) return;
+
+        let event: Record<string, unknown> | null = null;
+        try {
+          const once = JSON.parse(raw);
+          event = typeof once === "string" ? JSON.parse(once) : once;
+        } catch {
+          // Not the expected double-encoded JSON — surface as raw delta text.
+          controller.enqueue(eventFrame("delta", { text: raw }));
+          return;
+        }
+        if (!event || typeof event !== "object") return;
+
+        switch (event.event) {
+          case "stage":
+            if (typeof event.text === "string") {
+              controller.enqueue(eventFrame("stage", { text: event.text }));
+            }
+            break;
+          case "report_delta":
+            controller.enqueue(
+              eventFrame("delta", { text: typeof event.text === "string" ? event.text : "" })
+            );
+            break;
+          case "final":
+            controller.enqueue(
+              eventFrame("final", { text: typeof event.text === "string" ? event.text : "" })
+            );
+            break;
+          case "error":
+            console.error("AgentCore stream error event", {
+              code: event.error_code,
+              message: event.error_message,
+            });
+            controller.enqueue(eventFrame("error", { message: "Agent 服務暫時發生問題，請稍後再試。" }));
+            break;
+          default:
+            break;
+        }
+      }
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() ?? "";
+          for (const frame of frames) handleFrame(frame);
+        }
+      } catch (error) {
+        console.error("Agent stream normalization failed", error);
+        controller.enqueue(eventFrame("error", { message: "串流中斷，請稍後再試。" }));
+      } finally {
+        controller.enqueue(sseFrame("[DONE]"));
+        controller.close();
+      }
+    },
+  });
 }
 
 function sseHeaders(): HeadersInit {
@@ -39,45 +137,81 @@ function buildMockReply(message: string): string {
   if (text.includes("sol")) {
     return "SOL — 未來一週趨勢分析\n\n當前價格 172.40 美元（24h +4.2%）\n\n· 站穩 4H MA20（165 美元）\n· RSI 62，尚未進入超買區\n· Solana DEX 日交易量 2.8B 美元\n\n判斷：短期偏多，目標區間 178–185 美元。";
   }
-  return `已收到你的問題：「${message}」。\n\n這是本地示範回覆（尚未設定 BACKEND_URL 環境變數）。設定 BACKEND_URL 後，這個 route 會改為即時代理你的真實後端 SSE 回應。`;
+  return `已收到你的問題：「${message}」。\n\n這是本地示範回覆（尚未設定 AGENT_FUNCTION_URL 環境變數）。設定 AGENT_FUNCTION_URL 後，這個 route 會改為即時代理 Bedrock AgentCore 的真實串流回應。`;
 }
 
 export async function POST(request: NextRequest) {
-  const backendUrl = process.env.BACKEND_URL;
+  const agentFunctionUrl = process.env.AGENT_FUNCTION_URL;
   const payload = (await request.json()) as { message?: string; history?: unknown };
   const message = payload.message ?? "";
 
-  if (backendUrl) {
-    const path = process.env.BACKEND_CHAT_STREAM_PATH ?? "/chat/stream";
-    const upstream = await fetch(`${backendUrl}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: request.signal,
-    });
+  if (agentFunctionUrl) {
+    // The Lambda (agentcore_stream_proxy.mjs) only accepts a single-key
+    // body `{"prompt": "..."}` and starts a fresh AgentCore session per
+    // call, so conversation history is intentionally not forwarded.
+    const prompt = message.trim();
 
-    if (!upstream.ok || !upstream.body) {
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(
-            sseFrame(JSON.stringify({ delta: "後端服務暫時無法連線，請稍後再試。" }))
-          );
-          controller.enqueue(sseFrame("[DONE]"));
-          controller.close();
-        },
-      });
-      return new Response(stream, { headers: sseHeaders() });
+    if (!prompt || prompt.length > MAX_PROMPT_LENGTH) {
+      const reason = !prompt ? "訊息不可為空。" : `訊息長度不可超過 ${MAX_PROMPT_LENGTH} 字元。`;
+      return new Response(errorStream(reason), { headers: sseHeaders() });
     }
 
-    return new Response(upstream.body, { headers: sseHeaders() });
+    // The Lambda's ?verify= token is provided by the user via the settings
+    // UI (stored client-side, sent as this header) rather than hardcoded
+    // server config. AGENT_FUNCTION_URL_VERIFY_TOKEN is only a deployment
+    // fallback for when the user hasn't set one yet.
+    const verifyToken =
+      request.headers.get("x-agent-verify-token") || process.env.AGENT_FUNCTION_URL_VERIFY_TOKEN;
+
+    if (!verifyToken) {
+      return new Response(
+        errorStream("尚未設定 Agent 存取碼，請點擊右上角的設定圖示輸入 verify token。"),
+        { headers: sseHeaders() }
+      );
+    }
+
+    const url = new URL(agentFunctionUrl);
+    url.searchParams.set("verify", verifyToken);
+
+    let upstream: Response;
+    try {
+      upstream = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+        signal: request.signal,
+      });
+    } catch (error) {
+      console.error("Agent function URL request failed", error);
+      return new Response(errorStream("無法連線至 Agent 服務，請稍後再試。"), {
+        headers: sseHeaders(),
+      });
+    }
+
+    if (upstream.status === 401) {
+      return new Response(errorStream("Agent 存取碼不正確，請點擊右上角的設定圖示重新輸入。"), {
+        headers: sseHeaders(),
+      });
+    }
+
+    if (!upstream.ok || !upstream.body) {
+      console.error("Agent function URL returned an error", upstream.status);
+      return new Response(errorStream("Agent 服務暫時無法回應，請稍後再試。"), {
+        headers: sseHeaders(),
+      });
+    }
+
+    return new Response(normalizeAgentStream(upstream), { headers: sseHeaders() });
   }
 
   const chunks = chunkText(buildMockReply(message));
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      controller.enqueue(eventFrame("stage", { text: "正在分析你的問題..." }));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       for (const chunk of chunks) {
         if (request.signal.aborted) break;
-        controller.enqueue(sseFrame(JSON.stringify({ delta: chunk })));
+        controller.enqueue(eventFrame("delta", { text: chunk }));
         await new Promise((resolve) => setTimeout(resolve, 30));
       }
       controller.enqueue(sseFrame("[DONE]"));

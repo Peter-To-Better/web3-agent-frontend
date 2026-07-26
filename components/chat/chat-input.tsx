@@ -14,12 +14,13 @@ interface ChatInputProps {
 export function ChatInput({ value, onChange, onSend, disabled, isStreaming, onStop }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Reset the auto-grown height whenever the value is cleared from outside
-  // (e.g. after send()), since that bypasses the onChange-driven resize below.
+  // Keep the textarea height in sync for both typing and programmatic values
+  // (for example when a sidebar prompt fills the controlled input).
   useEffect(() => {
-    if (value === "" && textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    if (value) el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [value]);
 
   function handleInput(event: ChangeEvent<HTMLTextAreaElement>) {

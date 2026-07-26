@@ -27,6 +27,12 @@ export interface MarketRankingRow {
   longShortRatio: number | null;
   /** Point of Control — the price level with the most traded volume over the recent kline window; null if not enough history. */
   poc: number | null;
+  /** Binance USDⓈ-M futures last funding rate (fraction, e.g. 0.0001 = 0.01%); null if the symbol has no futures market. */
+  fundingRate: number | null;
+  /** 24h quote (USDT) trading volume from Binance spot ticker. */
+  quoteVolume: number | null;
+  /** Recent 1h closes (most recent last), for an inline mini trend chart; null if kline history wasn't available. */
+  sparkline: number[] | null;
 }
 
 export interface RecommendationRow {
@@ -45,6 +51,8 @@ export interface MarketRecommendations {
 export interface MarketDashboardData {
   gainers: MarketRankingRow[];
   losers: MarketRankingRow[];
+  /** Top-N by 24h quote volume, independent of price direction. */
+  volumes: MarketRankingRow[];
   recommendations: MarketRecommendations;
   averageRsi: number | null;
   previousAverageRsi: number | null;
@@ -62,4 +70,6 @@ export interface FearGreedReading {
   value: number;
   /** Chinese classification label, e.g. "貪婪", "極度恐懼". */
   classification: string;
+  /** Yesterday's reading, for a day-over-day delta; null if unavailable. */
+  previousValue: number | null;
 }

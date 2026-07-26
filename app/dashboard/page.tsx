@@ -3,6 +3,7 @@ import { TopBar } from "@/components/layout";
 import { TickerTape } from "@/components/home";
 import { MarketPanel } from "@/components/dashboard";
 import { getMarketDashboardData, getTickerSnapshot } from "@/lib/market-data";
+import { getFearGreedIndex } from "@/lib/fear-greed";
 import type { MarketDashboardData } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -23,12 +24,13 @@ function ChatLink() {
 }
 
 export default async function DashboardPage() {
-  const [data, tickerQuotes] = await Promise.all([
+  const [data, tickerQuotes, fearGreed] = await Promise.all([
     getMarketDashboardData().catch((error): MarketDashboardData | null => {
       console.error("Dashboard market data fetch failed", error);
       return null;
     }),
     getTickerSnapshot().catch(() => []),
+    getFearGreedIndex().catch(() => null),
   ]);
 
   return (
@@ -41,7 +43,7 @@ export default async function DashboardPage() {
           即時市場排行、多空比與平均 RSI，資料來源 Binance，每 20 秒自動更新。
         </p>
 
-        <MarketPanel initialData={data} />
+        <MarketPanel initialData={data} fearGreed={fearGreed} />
       </main>
     </div>
   );

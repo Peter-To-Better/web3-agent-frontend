@@ -20,7 +20,7 @@ interface AlternativeFngResponse {
  */
 export async function getFearGreedIndex(): Promise<FearGreedReading | null> {
   try {
-    const res = await fetch("https://api.alternative.me/fng/?limit=1&format=json", {
+    const res = await fetch("https://api.alternative.me/fng/?limit=2&format=json", {
       signal: AbortSignal.timeout(8000),
       next: { revalidate: 900 },
     });
@@ -31,9 +31,13 @@ export async function getFearGreedIndex(): Promise<FearGreedReading | null> {
     const value = entry ? parseInt(entry.value, 10) : NaN;
     if (!entry || !Number.isFinite(value)) return null;
 
+    const previousEntry = json.data?.[1];
+    const previousValue = previousEntry ? parseInt(previousEntry.value, 10) : NaN;
+
     return {
       value,
       classification: CLASSIFICATION_MAP[entry.value_classification] ?? entry.value_classification,
+      previousValue: Number.isFinite(previousValue) ? previousValue : null,
     };
   } catch (error) {
     console.error("Fear & Greed index fetch failed", error);

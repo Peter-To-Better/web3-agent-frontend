@@ -17,6 +17,11 @@ function formatPrice(price: number): string {
   return `$${price.toFixed(8).replace(/0+$/, "").replace(/\.$/, "")}`;
 }
 
+function formatFundingRate(rate: number | null): string {
+  if (rate === null) return "—";
+  return `${rate >= 0 ? "+" : ""}${(rate * 100).toFixed(4)}%`;
+}
+
 interface MarketIndicatorCardProps {
   indicator: MarketRankingRow;
 }
@@ -30,6 +35,12 @@ export function MarketIndicatorCard({ indicator }: MarketIndicatorCardProps) {
       : indicator.longShortRatio >= 1
         ? "text-ink-gain"
         : "text-ink-loss";
+  const fundingTone =
+    indicator.fundingRate === null
+      ? "text-ink-fg-muted"
+      : indicator.fundingRate >= 0
+        ? "text-ink-gain"
+        : "text-ink-loss";
 
   return (
     <CornerFrame className="border border-ink-border bg-ink-surface">
@@ -39,7 +50,7 @@ export function MarketIndicatorCard({ indicator }: MarketIndicatorCardProps) {
           {isUp ? "▲" : "▼"} {Math.abs(indicator.changePct).toFixed(1)}%
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-3 px-4 py-3 font-mono text-[12px] sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 px-4 py-3 font-mono text-[12px] sm:grid-cols-5">
         <div>
           <div className="text-[10px] text-ink-fg-muted">價格</div>
           <div className="mt-0.5 text-ink-fg-secondary">{formatPrice(indicator.price)}</div>
@@ -64,6 +75,10 @@ export function MarketIndicatorCard({ indicator }: MarketIndicatorCardProps) {
           <div className="mt-0.5 text-ink-fg-secondary">
             {indicator.poc === null ? "—" : formatPrice(indicator.poc)}
           </div>
+        </div>
+        <div>
+          <div className="text-[10px] text-ink-fg-muted">資金費率</div>
+          <div className={`mt-0.5 ${fundingTone}`}>{formatFundingRate(indicator.fundingRate)}</div>
         </div>
       </div>
     </CornerFrame>

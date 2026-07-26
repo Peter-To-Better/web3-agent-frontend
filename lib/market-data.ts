@@ -24,10 +24,15 @@ interface BinanceLongShortRatio {
   longShortRatio: string;
 }
 
+interface BinancePremiumIndex {
+  lastFundingRate: string;
+}
+
 interface BinanceTicker24hrSingle {
   symbol: string;
   lastPrice: string;
   priceChangePercent: string;
+  quoteVolume: string;
 }
 
 function fetchJson<T>(url: string, revalidateSeconds?: number): Promise<T> {
@@ -105,6 +110,7 @@ interface TopMover {
   symbol: string;
   lastPrice: number;
   changePct: number;
+  quoteVolume: number;
 }
 
 /** All qualifying USDT pairs, sorted descending by 24h % change (biggest gainers first). */
@@ -121,18 +127,28 @@ async function fetchAllMovers(): Promise<TopMover[]> {
     .map((t) => {
       const open = parseFloat(t.openPrice);
       const last = parseFloat(t.lastPrice);
-      return { symbol: t.symbol, lastPrice: last, changePct: open ? ((last - open) / open) * 100 : 0 };
+      const quoteVolume = parseFloat(t.quoteVolume);
+      return {
+        symbol: t.symbol,
+        lastPrice: last,
+        changePct: open ? ((last - open) / open) * 100 : 0,
+        quoteVolume,
+      };
     })
     .sort((a, b) => b.changePct - a.changePct);
 }
+
+const SPARKLINE_POINTS = 24;
 
 interface KlineIndicators {
   rsi: number | null;
   previousRsi: number | null;
   poc: number | null;
+  /** Last SPARKLINE_POINTS hourly closes (oldest first), for an inline mini trend chart. */
+  sparkline: number[] | null;
 }
 
-const EMPTY_KLINE_INDICATORS: KlineIndicators = { rsi: null, previousRsi: null, poc: null };
+const EMPTY_KLINE_INDICATORS: KlineIndicators = { rsi: null, previousRsi: null, poc: null, sparkline: null };
 
 async function fetchKlineIndicators(symbol: string): Promise<KlineIndicators> {
   try {
@@ -153,6 +169,7 @@ async function fetchKlineIndicators(symbol: string): Promise<KlineIndicators> {
       // Same series with the last 24 hourly candles dropped — RSI as of ~24h ago.
       previousRsi: computeRsi(closes.slice(0, Math.max(0, closes.length - 24))),
       poc: computePoc(candles),
+      sparkline: closes.slice(-SPARKLINE_POINTS),
     };
   } catch {
     return EMPTY_KLINE_INDICATORS;
@@ -173,6 +190,18 @@ async function fetchLongShortRatio(symbol: string): Promise<number | null> {
   }
 }
 
+/** Last funding rate (fraction, e.g. 0.0001 = 0.01%) for the symbol's USDⓈ-M perpetual, if one exists. */
+async function fetchFundingRate(symbol: string): Promise<number | null> {
+  try {
+    const row = await fetchJson<BinancePremiumIndex>(`${FUTURES_BASE}/fapi/v1/premiumIndex?symbol=${symbol}`, 15);
+    const value = parseFloat(row.lastFundingRate);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    // Most likely this symbol has no USDⓈ-M futures market — not an error.
+    return null;
+  }
+}
+
 function average(values: Array<number | null>): number | null {
   const present = values.filter((v): v is number => v !== null);
   if (!present.length) return null;
@@ -180,9 +209,10 @@ function average(values: Array<number | null>): number | null {
 }
 
 async function withIndicators(mover: TopMover): Promise<{ row: MarketRankingRow; previousRsi: number | null }> {
-  const [kline, longShortRatio] = await Promise.all([
+  const [kline, longShortRatio, fundingRate] = await Promise.all([
     fetchKlineIndicators(mover.symbol),
     fetchLongShortRatio(mover.symbol),
+    fetchFundingRate(mover.symbol),
   ]);
   return {
     row: {
@@ -192,6 +222,9 @@ async function withIndicators(mover: TopMover): Promise<{ row: MarketRankingRow;
       rsi: kline.rsi,
       longShortRatio,
       poc: kline.poc,
+      fundingRate,
+      quoteVolume: mover.quoteVolume,
+      sparkline: kline.sparkline,
     },
     previousRsi: kline.previousRsi,
   };
@@ -217,15 +250,18 @@ export async function getMarketDashboardData(): Promise<MarketDashboardData> {
   const allMovers = await fetchAllMovers();
   const topGainerMovers = allMovers.slice(0, TOP_N);
   const topLoserMovers = allMovers.slice(-TOP_N).reverse();
+  const topVolumeMovers = [...allMovers].sort((a, b) => b.quoteVolume - a.quoteVolume).slice(0, TOP_N);
 
-  const [gainerResults, loserResults] = await Promise.all([
+  const [gainerResults, loserResults, volumeResults] = await Promise.all([
     Promise.all(topGainerMovers.map(withIndicators)),
     Promise.all(topLoserMovers.map(withIndicators)),
+    Promise.all(topVolumeMovers.map(withIndicators)),
   ]);
 
   return {
     gainers: gainerResults.map((r) => r.row),
     losers: loserResults.map((r) => r.row),
+    volumes: volumeResults.map((r) => r.row),
     recommendations: {
       long: gainerResults.slice(0, 3).map((r) => toRecommendation(r.row, "long")),
       short: loserResults.slice(0, 3).map((r) => toRecommendation(r.row, "short")),
@@ -283,9 +319,10 @@ export async function getSymbolIndicators(baseSymbol: string): Promise<MarketRan
     return null;
   }
 
-  const [kline, longShortRatio] = await Promise.all([
+  const [kline, longShortRatio, fundingRate] = await Promise.all([
     fetchKlineIndicators(symbol),
     fetchLongShortRatio(symbol),
+    fetchFundingRate(symbol),
   ]);
 
   return {
@@ -295,5 +332,8 @@ export async function getSymbolIndicators(baseSymbol: string): Promise<MarketRan
     rsi: kline.rsi,
     longShortRatio,
     poc: kline.poc,
+    fundingRate,
+    quoteVolume: Number.isFinite(parseFloat(ticker.quoteVolume)) ? parseFloat(ticker.quoteVolume) : null,
+    sparkline: kline.sparkline,
   };
 }

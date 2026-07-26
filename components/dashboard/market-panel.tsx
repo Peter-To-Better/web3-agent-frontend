@@ -6,7 +6,7 @@ import { MarketRankingTable } from "./market-ranking-table";
 import { RecommendationTable } from "./recommendation-table";
 import { useLivePrices } from "@/hooks/use-live-prices";
 import type { GaugeReading } from "@/lib/dashboard-data";
-import type { MarketDashboardData, MarketRankingRow, RecommendationRow } from "@/lib/types";
+import type { FearGreedReading, MarketDashboardData, MarketRankingRow, RecommendationRow } from "@/lib/types";
 
 // RSI / long-short ratio / POC / which coins are even in the top-5 all
 // require a server-side recompute across several symbols — they genuinely
@@ -25,6 +25,15 @@ function toGaugeReading(data: MarketDashboardData): GaugeReading {
   };
 }
 
+function toFearGreedGaugeReading(reading: FearGreedReading | null): GaugeReading {
+  return {
+    title: "恐慌貪婪指數",
+    value: reading?.value ?? 50,
+    previousValue: reading?.previousValue ?? reading?.value ?? 50,
+    zones: ["極度恐懼", "恐懼", "中性", "貪婪", "極度貪婪"],
+  };
+}
+
 function applyLivePrice<T extends { symbol: string; price: number; changePct: number }>(
   row: T,
   live: Record<string, { price: number; changePct: number }>
@@ -35,9 +44,10 @@ function applyLivePrice<T extends { symbol: string; price: number; changePct: nu
 
 interface MarketPanelProps {
   initialData: MarketDashboardData | null;
+  fearGreed: FearGreedReading | null;
 }
 
-export function MarketPanel({ initialData }: MarketPanelProps) {
+export function MarketPanel({ initialData, fearGreed }: MarketPanelProps) {
   const [data, setData] = useState(initialData);
   const [staleError, setStaleError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -96,7 +106,9 @@ export function MarketPanel({ initialData }: MarketPanelProps) {
 
   const handleRefresh = useCallback(() => pollNowRef.current(), []);
 
-  const liveSymbols = data ? [...data.gainers.map((r) => r.symbol), ...data.losers.map((r) => r.symbol)] : [];
+  const liveSymbols = data
+    ? [...data.gainers.map((r) => r.symbol), ...data.losers.map((r) => r.symbol), ...data.volumes.map((r) => r.symbol)]
+    : [];
   const livePrices = useLivePrices(liveSymbols);
 
   if (!data) {
@@ -110,19 +122,27 @@ export function MarketPanel({ initialData }: MarketPanelProps) {
   const updatedTime = new Date(data.updatedAt).toLocaleTimeString("zh-TW", { hour12: false });
   const liveGainers: MarketRankingRow[] = data.gainers.map((r) => applyLivePrice(r, livePrices));
   const liveLosers: MarketRankingRow[] = data.losers.map((r) => applyLivePrice(r, livePrices));
+  const liveVolumes: MarketRankingRow[] = data.volumes.map((r) => applyLivePrice(r, livePrices));
   const liveLong: RecommendationRow[] = data.recommendations.long.map((r) => applyLivePrice(r, livePrices));
   const liveShort: RecommendationRow[] = data.recommendations.short.map((r) => applyLivePrice(r, livePrices));
 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-        <MarketRankingTable gainers={liveGainers} losers={liveLosers} onRefresh={handleRefresh} refreshing={refreshing} />
+        <MarketRankingTable
+          gainers={liveGainers}
+          losers={liveLosers}
+          volumes={liveVolumes}
+          onRefresh={handleRefresh}
+          refreshing={refreshing}
+        />
         <div className="flex flex-col gap-2">
           <SentimentGauge reading={toGaugeReading(data)} animateOnScroll={false} />
           <div className="flex items-center justify-between px-1 font-mono text-[11px] text-ink-fg-muted">
             <span>價格即時（WebSocket）／RSI 每 {POLL_INTERVAL_MS / 1000}s 更新</span>
             <span>{staleError ? "更新失敗，顯示上次資料" : `RSI 更新於 ${updatedTime}`}</span>
           </div>
+          <SentimentGauge reading={toFearGreedGaugeReading(fearGreed)} animateOnScroll={false} />
         </div>
       </div>
 

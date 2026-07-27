@@ -154,7 +154,7 @@ data: [DONE]
 ### 建置 image 的選擇
 
 - **GitHub + CodeBuild**：適合不想在本機設定 AWS CLI；CodeBuild 從 GitHub 取得原始碼、建置並推送 ECR。
-- **本機 Docker + AWS CLI**：最快，但本機必須完成 AWS SSO 登入。
+- **本機 Docker + AWS CLI（目前採用）**：最快，但本機必須完成 AWS SSO 登入；已用 `deploy-ecs.sh` 腳本化，見第 16 節。
 - 不要將 AWS credentials 寫進 Dockerfile 或 repository。
 
 ## 7. 建立 IAM Roles
@@ -542,25 +542,66 @@ CloudTrail → Lambda Invoke / AgentCore Invoke events
 
 ## 16. 上線與回滾
 
+實際上線流程已由 `deploy-ecs.sh` 腳本化：讀取目前 ECS Service 使用的 Task Definition 作為基礎、換上新的 image tag、註冊新 revision、更新 Service 並等待穩定，最後對 `/`、`/chat`、`/dashboard` 做 HTTP smoke test。腳本會拒絕覆蓋已存在的 ECR tag（immutable tag），並在任何一步失敗時印出回滾指令。
+
 ### 上線
 
-1. 建置新的 immutable image tag，例如 Git commit SHA。
-2. 推送 image 到 ECR。
-3. 建立新的 ECS Task Definition revision。
-4. 更新 ECS Service。
-5. 等待新 targets healthy。
-6. 驗證首頁、聊天、SSE 與 AgentCore session。
-7. 再將舊 tasks drain／停止。
+```bash
+cd /Users/chenweiren/web3-agent-frontend
 
-不要只使用無法追蹤內容的 `latest` 作為正式部署依據。
+# 確認 Docker Desktop / OrbStack 已啟動
+docker info
+
+# 登入 AWS SSO（session 過期時需要）
+aws sso login --profile poc
+
+# 確保腳本可執行（首次或 clone 後）
+chmod +x deploy-ecs.sh
+
+# 產生不重複的 image tag
+TAG="manual-$(date +%Y%m%d-%H%M%S)"
+
+# 先做唯讀檢查，不會部署、不會 build/push
+./deploy-ecs.sh "$TAG" --dry-run
+
+# 正式 build、push ECR、更新 ECS 並等待服務穩定
+./deploy-ecs.sh "$TAG"
+```
+
+也可以省略 `--dry-run` 步驟直接兩行部署：
+
+```bash
+aws sso login --profile poc
+./deploy-ecs.sh "manual-$(date +%Y%m%d-%H%M%S)"
+```
+
+腳本內部依序執行：
+
+1. 確認 AWS 身分（`sts get-caller-identity`）與 ECR / ECS 資源存在。
+2. 讀取目前 ECS Service 使用的 Task Definition，作為新 revision 的基礎（沿用其他 container 設定，只替換 image）。
+3. 依現有 Task Definition 的 `runtimePlatform.cpuArchitecture` 決定 `docker build --platform`（`linux/arm64` 或 `linux/amd64`），避免架構不match。
+4. Build image 並以 `<repo-uri>:<TAG>` push 到 ECR（tag 不可覆蓋既有值）。
+5. 註冊新的 ECS Task Definition revision。
+6. `ecs update-service --force-new-deployment` 並 `ecs wait services-stable`。
+7. 找出新 revision 對應的 running task，嘗試解析其 public IP 或透過 Service 綁定的 ALB DNS，對 `/`、`/chat`、`/dashboard` 做 HTTP smoke test（最多重試 12 次、每次間隔 5 秒）。
+
+可用環境變數覆寫預設值（見 `./deploy-ecs.sh --help`）：`AWS_PROFILE`、`AWS_REGION`、`ECR_REPOSITORY`、`ECS_CLUSTER`、`ECS_SERVICE`、`ECS_CONTAINER_NAME`、`SMOKE_BASE_URL`、`SMOKE_SCHEME`。
+
+不要只使用無法追蹤內容的 `latest` 作為正式部署依據；`TAG` 建議帶時間戳或 Git commit SHA 以利追溯。
 
 ### 回滾
 
-1. 在 ECS Service 選擇上一版 Task Definition revision。
-2. Force new deployment。
-3. 確認上一版 targets healthy。
-4. 若問題在 Lambda，將 Lambda alias 切回上一版 version。
-5. 透過 CloudWatch／CloudTrail 記錄定位失敗原因。
+- 腳本本身：只要在 smoke test 之前的任何一步失敗（`set -Eeuo pipefail` + `trap ... ERR`），會自動印出「回滾到部署前 Task Definition」的完整指令，直接複製貼上執行即可：
+
+  ```bash
+  AWS_PROFILE=poc AWS_REGION=ap-northeast-1 aws ecs update-service \
+    --cluster hoya-bit-frontend --service hoya-bit-frontend \
+    --task-definition <部署前的 Task Definition ARN> --force-new-deployment
+  ```
+
+- Smoke test 失敗（服務已切到新版但 HTTP 驗證沒過）：腳本同樣會印出上述回滾指令並以非零狀態結束，需要人工確認後手動執行。
+- 若問題出在 Lambda 而非 ECS，將 Lambda alias 切回上一版 version。
+- 透過 CloudWatch／CloudTrail 記錄定位失敗原因（見第 14 節）。
 
 ## 17. 成本與清理
 

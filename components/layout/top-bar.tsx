@@ -8,7 +8,11 @@ interface TopBarProps {
 
 export function TopBar({ actions }: TopBarProps) {
   return (
-    <header className="col-span-full flex h-14 flex-shrink-0 items-center justify-between border-b border-ink-border bg-ink-bg px-4 md:px-6">
+    <header
+      data-entrance="1"
+      data-entrance-y="-10"
+      className="col-span-full flex h-14 flex-shrink-0 items-center justify-between border-b border-ink-border bg-ink-bg px-4 md:px-6"
+    >
       <Link href="/" className="flex items-center gap-2 text-[15px] font-bold text-ink-fg">
         <Logo size={30} />
         HOYA BIT AI

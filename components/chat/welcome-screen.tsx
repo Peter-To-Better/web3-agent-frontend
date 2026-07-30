@@ -7,7 +7,7 @@ interface WelcomeScreenProps {
 
 export function WelcomeScreen({ onSelect }: WelcomeScreenProps) {
   return (
-    <div className="m-auto max-w-[640px] px-5 py-10 text-center">
+    <div data-entrance="4" className="m-auto max-w-[640px] px-5 py-10 text-center">
       <div className="mb-5 flex justify-center">
         <Logo size={64} />
       </div>
@@ -15,7 +15,7 @@ export function WelcomeScreen({ onSelect }: WelcomeScreenProps) {
       <p className="mb-7 text-sm leading-relaxed text-ink-fg-secondary">
         你的加密市場智能分析助理。輸入任何關於加密貨幣的問題，我會即時蒐集多源資料為你分析。
       </p>
-      <div className="grid grid-cols-1 gap-2.5 text-left sm:grid-cols-2">
+      <div data-tour="chat-welcome" className="grid grid-cols-1 gap-2.5 text-left sm:grid-cols-2">
         {welcomeCards.map((card) => (
           <CornerFrame key={card.title}>
             <button

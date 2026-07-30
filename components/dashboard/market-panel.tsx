@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SentimentGauge } from "./sentiment-gauge";
 import { MarketRankingTable } from "./market-ranking-table";
-import { RecommendationTable } from "./recommendation-table";
+import { FeatureTour } from "@/components/tour";
+import { dashboardTourSteps } from "@/lib/tour-steps";
 import { useLivePrices } from "@/hooks/use-live-prices";
 import type { GaugeReading } from "@/lib/dashboard-data";
-import type { FearGreedReading, MarketDashboardData, MarketRankingRow, RecommendationRow } from "@/lib/types";
+import type { FearGreedReading, MarketDashboardData, MarketRankingRow } from "@/lib/types";
 
 // RSI / long-short ratio / POC / which coins are even in the top-5 all
 // require a server-side recompute across several symbols — they genuinely
@@ -123,12 +124,13 @@ export function MarketPanel({ initialData, fearGreed }: MarketPanelProps) {
   const liveGainers: MarketRankingRow[] = data.gainers.map((r) => applyLivePrice(r, livePrices));
   const liveLosers: MarketRankingRow[] = data.losers.map((r) => applyLivePrice(r, livePrices));
   const liveVolumes: MarketRankingRow[] = data.volumes.map((r) => applyLivePrice(r, livePrices));
-  const liveLong: RecommendationRow[] = data.recommendations.long.map((r) => applyLivePrice(r, livePrices));
-  const liveShort: RecommendationRow[] = data.recommendations.short.map((r) => applyLivePrice(r, livePrices));
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+      {/* 只在資料成功渲染後掛載導覽，確保 spotlight 目標都存在。 */}
+      <FeatureTour tourId="dashboard" steps={dashboardTourSteps} />
+      {/* items-start：排行卡按內容自然高度，不再被拉伸到與較高的儀表欄等高。 */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_320px]">
         <MarketRankingTable
           gainers={liveGainers}
           losers={liveLosers}
@@ -137,18 +139,20 @@ export function MarketPanel({ initialData, fearGreed }: MarketPanelProps) {
           refreshing={refreshing}
         />
         <div className="flex flex-col gap-2">
-          <SentimentGauge reading={toGaugeReading(data)} animateOnScroll={false} />
-          <div className="flex items-center justify-between px-1 font-mono text-[11px] text-ink-fg-muted">
+          <div data-tour="dash-rsi-gauge">
+            <SentimentGauge reading={toGaugeReading(data)} animateOnScroll={false} />
+          </div>
+          <div
+            data-tour="dash-freshness"
+            className="flex items-center justify-between px-1 font-mono text-[11px] text-ink-fg-muted"
+          >
             <span>價格即時（WebSocket）／RSI 每 {POLL_INTERVAL_MS / 1000}s 更新</span>
             <span>{staleError ? "更新失敗，顯示上次資料" : `RSI 更新於 ${updatedTime}`}</span>
           </div>
-          <SentimentGauge reading={toFearGreedGaugeReading(fearGreed)} animateOnScroll={false} />
+          <div data-tour="dash-fng-gauge">
+            <SentimentGauge reading={toFearGreedGaugeReading(fearGreed)} animateOnScroll={false} />
+          </div>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RecommendationTable title="做多推薦" tone="gain" rows={liveLong} onRefresh={handleRefresh} refreshing={refreshing} />
-        <RecommendationTable title="做空推薦" tone="loss" rows={liveShort} onRefresh={handleRefresh} refreshing={refreshing} />
       </div>
     </div>
   );

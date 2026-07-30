@@ -58,6 +58,7 @@ export function AgentTokenDialog() {
       <button
         type="button"
         onClick={handleOpen}
+        data-tour="chat-token"
         title="設定 Agent 存取碼"
         className="flex items-center gap-1.5 rounded-lg border border-ink-border px-2.5 py-1.5 text-xs text-ink-fg-secondary transition-colors hover:border-ink-fg-secondary hover:text-ink-fg"
       >

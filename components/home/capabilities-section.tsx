@@ -6,12 +6,17 @@ import { gsap, useGSAP, prefersReducedMotion } from "@/lib/gsap";
 import { capabilities } from "@/lib/home-data";
 
 /**
- * Pinned horizontal-scroll showcase: vertical scroll drives horizontal
- * movement through five panels (desktop only — falls back to a native
- * horizontal swipe row on touch/narrow/reduced-motion). The five panels
- * are the exact capabilities the HOYA BIT hackathon brief scores against,
- * not generic marketing bullets.
+ * Pinned 3D-conveyor showcase: vertical scroll drives the five capability
+ * cards through a perspective "viewing position" — the centered card faces
+ * the reader at full brightness while its neighbours recede into depth
+ * (rotateY + translateZ + dimming). Desktop only; falls back to a native
+ * horizontal swipe row on touch/narrow/reduced-motion. The five panels are
+ * the exact capabilities the HOYA BIT hackathon brief scores against.
  */
+const MAX_TILT_DEG = 16;
+const MAX_DEPTH_PX = 240;
+const MAX_DIM = 0.45;
+
 export function CapabilitiesSection() {
   const sectionRef = useRef<HTMLElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -22,21 +27,68 @@ export function CapabilitiesSection() {
       const track = trackRef.current;
       if (!isDesktop || prefersReducedMotion() || !track) return;
 
-      const distance = track.scrollWidth - track.clientWidth;
-      if (distance <= 0) return;
+      const cards = gsap.utils.toArray<HTMLElement>(track.children);
+      if (cards.length < 2) return;
 
-      gsap.to(track, {
-        x: -distance,
-        ease: "none",
-        scrollTrigger: {
-          trigger: sectionRef.current,
-          start: "top top",
-          end: () => `+=${distance}`,
-          pin: true,
-          scrub: 1,
-          invalidateOnRefresh: true,
-        },
-      });
+      gsap.set(cards, { transformPerspective: 1100 });
+
+      // 量測一次（refresh 時重量測）：卡片中心點在未位移座標系中的位置。
+      let centers: number[] = [];
+      let trackLeft0 = 0;
+      let viewCenter = 0;
+      let startX = 0;
+      let endX = 0;
+
+      const measure = () => {
+        viewCenter = window.innerWidth / 2;
+        trackLeft0 = track.getBoundingClientRect().left - (Number(gsap.getProperty(track, "x")) || 0);
+        centers = cards.map((card) => card.offsetLeft + card.offsetWidth / 2);
+        startX = viewCenter - trackLeft0 - centers[0];
+        endX = viewCenter - trackLeft0 - centers[centers.length - 1];
+      };
+
+      const setters = cards.map((card) => ({
+        rotY: gsap.quickSetter(card, "rotationY", "deg"),
+        z: gsap.quickSetter(card, "z", "px"),
+        alpha: gsap.quickSetter(card, "opacity"),
+      }));
+
+      // 依卡片與「檢視位」（視窗中線）的距離套用縱深姿態，全部只寫 transform/opacity。
+      const applyDepth = () => {
+        const tx = Number(gsap.getProperty(track, "x")) || 0;
+        cards.forEach((_, i) => {
+          const d = (trackLeft0 + centers[i] + tx - viewCenter) / viewCenter;
+          const clamped = Math.max(-1.4, Math.min(1.4, d));
+          setters[i].rotY(clamped * -MAX_TILT_DEG);
+          setters[i].z(-Math.abs(clamped) * MAX_DEPTH_PX);
+          setters[i].alpha(1 - Math.min(Math.abs(clamped) * MAX_DIM, MAX_DIM));
+        });
+      };
+
+      measure();
+
+      gsap.fromTo(track,
+        { x: () => startX },
+        {
+          x: () => endX,
+          ease: "none",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "top top",
+            end: () => `+=${centers[centers.length - 1] - centers[0]}`,
+            pin: true,
+            scrub: 1,
+            invalidateOnRefresh: true,
+            onRefresh: () => {
+              measure();
+              applyDepth();
+            },
+            onUpdate: applyDepth,
+          },
+        }
+      );
+
+      applyDepth();
     },
     { scope: sectionRef }
   );

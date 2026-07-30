@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { TopBar } from "@/components/layout";
 import { Sidebar, WelcomeScreen, MessageList, ChatInput, AgentTokenDialog } from "@/components/chat";
+import { PageEntrance } from "@/components/common";
+import { FeatureTour, TourButton } from "@/components/tour";
+import { chatTourSteps } from "@/lib/tour-steps";
 import { useChat } from "@/hooks/use-chat";
 
 function DashboardLink() {
   return (
     <Link
       href="/dashboard"
+      data-tour="chat-dashboard-link"
       className="flex items-center gap-1.5 rounded-lg border border-ink-border px-2.5 py-1.5 text-xs text-ink-fg-secondary transition-colors hover:border-ink-fg-secondary hover:text-ink-fg"
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -26,9 +30,12 @@ export default function ChatPage() {
 
   return (
     <div className="grid h-screen grid-cols-1 grid-rows-[56px_1fr] overflow-hidden md:grid-cols-[260px_1fr]">
+      <PageEntrance />
+      <FeatureTour tourId="chat" steps={chatTourSteps} />
       <TopBar
         actions={
           <>
+            <TourButton tourId="chat" />
             <DashboardLink />
             <AgentTokenDialog />
           </>

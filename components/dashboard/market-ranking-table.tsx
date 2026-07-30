@@ -76,13 +76,13 @@ export function MarketRankingTable({ gainers, losers, volumes, onRefresh, refres
   const icon = mode === "gainers" ? "🔥" : mode === "losers" ? "🧊" : "📊";
 
   return (
-    <CornerFrame className="border border-ink-border bg-ink-surface">
+    <CornerFrame data-tour="dash-ranking" className="border border-ink-border bg-ink-surface">
       <div className="flex items-center justify-between border-b border-ink-border px-4 py-3">
         <span className="text-sm font-semibold text-ink-fg">
           {icon} 24h {MODE_LABELS[mode]}排行（前 5 名）
         </span>
         <div className="flex items-center gap-3">
-          <div className="flex rounded-lg border border-ink-border p-0.5 text-[11px] font-medium">
+          <div data-tour="dash-tabs" className="flex rounded-lg border border-ink-border p-0.5 text-[11px] font-medium">
             {(Object.keys(MODE_LABELS) as Mode[]).map((m) => (
               <button
                 key={m}

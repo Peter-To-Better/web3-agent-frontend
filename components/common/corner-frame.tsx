@@ -1,12 +1,9 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useRef, type ComponentPropsWithoutRef } from "react";
 import { gsap, useGSAP, ScrollTrigger, prefersReducedMotion } from "@/lib/gsap";
 
-interface CornerFrameProps {
-  children: ReactNode;
-  className?: string;
-}
+type CornerFrameProps = ComponentPropsWithoutRef<"div">;
 
 /**
  * HUD-style bracket corners — the site's recurring "readout panel" motif.
@@ -14,7 +11,7 @@ interface CornerFrameProps {
  * then the content settles in behind them. Stands in for the generic
  * colored-icon-in-rounded-box card pattern.
  */
-export function CornerFrame({ children, className = "" }: CornerFrameProps) {
+export function CornerFrame({ children, className = "", ...rest }: CornerFrameProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useGSAP(
@@ -52,7 +49,7 @@ export function CornerFrame({ children, className = "" }: CornerFrameProps) {
   const corner = "corner-frame__corner pointer-events-none absolute h-3 w-3 border-ink-accent/70";
 
   return (
-    <div ref={rootRef} className={`relative ${className}`}>
+    <div {...rest} ref={rootRef} className={`relative ${className}`}>
       <span
         className={`${corner} -left-px -top-px border-l-2 border-t-2`}
         style={{ transformOrigin: "top left" }}

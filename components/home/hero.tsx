@@ -20,6 +20,8 @@ export function Hero() {
   const descRef = useRef<HTMLParagraphElement>(null);
   const ctaRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const panel3dRef = useRef<HTMLDivElement>(null);
+  const tiltRef = useRef<HTMLDivElement>(null);
 
   useGSAP(
     () => {
@@ -39,13 +41,66 @@ export function Hero() {
           "-=0.15"
         )
         .fromTo(panelRef.current, { opacity: 0, x: 32 }, { opacity: 1, x: 0, duration: 0.8 }, "<")
-        .fromTo(descRef.current, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.6 }, "-=0.45")
+        // 報告面板像 HUD 懸浮窗：從側面深角度轉到 -7° 的常駐姿態。
+        .fromTo(
+          panel3dRef.current,
+          { rotationY: -20, transformPerspective: 1200 },
+          { rotationY: -7, duration: 1.1, ease: "power2.out" },
+          "<"
+        )
+        .fromTo(descRef.current, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.6 }, "-=0.75")
         .fromTo(
           ctaRef.current?.children ?? [],
           { opacity: 0, y: 14 },
           { opacity: 1, y: 0, duration: 0.5, stagger: 0.1 },
           "-=0.35"
         );
+
+      // 往下滾動時面板緩慢轉正退場（外層與載入動畫分屬不同元素，互不搶寫）。
+      gsap.fromTo(
+        panelRef.current,
+        { rotationY: 0, transformPerspective: 1400 },
+        {
+          rotationY: 7,
+          y: -24,
+          ease: "none",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "top top",
+            end: "bottom 35%",
+            scrub: 0.8,
+          },
+        }
+      );
+
+      // 滑鼠微視差（僅指標裝置）：內層獨立承接 pointer 的細微傾斜。
+      let removeTiltListeners: (() => void) | undefined;
+      if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+        const section = sectionRef.current;
+        const tiltX = gsap.quickTo(tiltRef.current, "rotationX", { duration: 0.7, ease: "power3.out" });
+        const tiltY = gsap.quickTo(tiltRef.current, "rotationY", { duration: 0.7, ease: "power3.out" });
+        gsap.set(tiltRef.current, { transformPerspective: 900 });
+
+        const onMove = (event: PointerEvent) => {
+          const rect = section?.getBoundingClientRect();
+          if (!rect) return;
+          const nx = (event.clientX - rect.left) / rect.width - 0.5;
+          const ny = (event.clientY - rect.top) / rect.height - 0.5;
+          tiltX(ny * -4);
+          tiltY(nx * 5);
+        };
+        const onLeave = () => {
+          tiltX(0);
+          tiltY(0);
+        };
+
+        section?.addEventListener("pointermove", onMove);
+        section?.addEventListener("pointerleave", onLeave);
+        removeTiltListeners = () => {
+          section?.removeEventListener("pointermove", onMove);
+          section?.removeEventListener("pointerleave", onLeave);
+        };
+      }
 
       gsap.to(glowRef.current, {
         opacity: 0.55,
@@ -65,9 +120,11 @@ export function Hero() {
       });
 
       return () => {
-        gsap.set([queryRef.current, headlineRef.current, descRef.current, panelRef.current], {
-          clearProps: "all",
-        });
+        removeTiltListeners?.();
+        gsap.set(
+          [queryRef.current, headlineRef.current, descRef.current, panelRef.current, panel3dRef.current, tiltRef.current],
+          { clearProps: "all" }
+        );
       };
     },
     { scope: sectionRef }
@@ -149,28 +206,32 @@ export function Hero() {
         </div>
 
         <div ref={panelRef}>
-          <CornerFrame className="border border-ink-border bg-ink-surface">
-            <div className="flex items-center gap-2 border-b border-ink-border px-4 py-3">
-              <span className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-ink-gain" />
-              <span className="font-mono text-[11px] text-ink-fg-muted">analysis/btc_sentiment.log</span>
-            </div>
-            <div className="space-y-3 px-5 py-5 font-mono text-[13px]">
-              <div className="text-ink-fg-secondary">
-                <span className="text-ink-accent">&gt;</span> BTC 市場情緒分析
-              </div>
-              <dl className="space-y-2">
-                {reportLines.map((line) => (
-                  <div key={line.label} className="flex items-baseline justify-between gap-4">
-                    <dt className="text-ink-fg-muted">{line.label}</dt>
-                    <dd className={line.tone === "gain" ? "text-ink-gain" : "text-ink-fg"}>{line.value}</dd>
+          <div ref={panel3dRef} className="will-change-transform">
+            <div ref={tiltRef}>
+              <CornerFrame className="border border-ink-border bg-ink-surface">
+                <div className="flex items-center gap-2 border-b border-ink-border px-4 py-3">
+                  <span className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-ink-gain" />
+                  <span className="font-mono text-[11px] text-ink-fg-muted">analysis/btc_sentiment.log</span>
+                </div>
+                <div className="space-y-3 px-5 py-5 font-mono text-[13px]">
+                  <div className="text-ink-fg-secondary">
+                    <span className="text-ink-accent">&gt;</span> BTC 市場情緒分析
                   </div>
-                ))}
-              </dl>
-              <div className="border-t border-ink-border pt-3 text-[11px] text-ink-fg-muted">
-                [1] CoinGlass&nbsp;&nbsp;[2] Glassnode&nbsp;&nbsp;[3] SoSoValue
-              </div>
+                  <dl className="space-y-2">
+                    {reportLines.map((line) => (
+                      <div key={line.label} className="flex items-baseline justify-between gap-4">
+                        <dt className="text-ink-fg-muted">{line.label}</dt>
+                        <dd className={line.tone === "gain" ? "text-ink-gain" : "text-ink-fg"}>{line.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="border-t border-ink-border pt-3 text-[11px] text-ink-fg-muted">
+                    [1] CoinGlass&nbsp;&nbsp;[2] Glassnode&nbsp;&nbsp;[3] SoSoValue
+                  </div>
+                </div>
+              </CornerFrame>
             </div>
-          </CornerFrame>
+          </div>
         </div>
       </div>
     </section>

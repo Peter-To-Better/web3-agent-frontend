@@ -43,8 +43,11 @@ export function ChatInput({ value, onChange, onSend, disabled, isStreaming, onSt
   }
 
   return (
-    <div className="border-t border-ink-border px-4 py-4 md:px-8">
-      <div className="mx-auto flex max-w-[720px] items-end gap-2.5 rounded-xl border border-ink-border bg-ink-surface py-1.5 pl-4 pr-1.5 focus-within:border-ink-accent">
+    <div data-entrance="5" className="border-t border-ink-border px-4 py-4 md:px-8">
+      <div
+        data-tour="chat-input"
+        className="mx-auto flex max-w-[720px] items-end gap-2.5 rounded-xl border border-ink-border bg-ink-surface py-1.5 pl-4 pr-1.5 focus-within:border-ink-accent"
+      >
         <textarea
           ref={textareaRef}
           rows={1}

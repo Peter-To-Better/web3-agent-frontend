@@ -8,8 +8,11 @@ interface SidebarProps {
 
 export function Sidebar({ onPromptSelect }: SidebarProps) {
   return (
-    <aside className="hidden w-[260px] flex-col border-r border-ink-border bg-ink-surface md:flex">
-      <div className="border-b border-ink-border px-4 py-4">
+    <aside
+      data-tour="chat-sidebar"
+      className="hidden w-[260px] flex-col border-r border-ink-border bg-ink-surface md:flex"
+    >
+      <div data-entrance="2" data-entrance-x="-14" className="border-b border-ink-border px-4 py-4">
         <div className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-fg-muted">
           快速提問
         </div>
@@ -24,6 +27,8 @@ export function Sidebar({ onPromptSelect }: SidebarProps) {
             key={item.title}
             type="button"
             onClick={() => onPromptSelect(item.prompt)}
+            data-entrance="3"
+            data-entrance-x="-14"
             className="group mb-1 flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-ink-elevated"
             title={`填入問題：${item.prompt}`}
           >

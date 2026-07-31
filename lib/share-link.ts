@@ -1,3 +1,4 @@
+import { localizeUtcTimestamps } from "@/lib/date-time";
 import type { ChatMessage, MarketRankingRow } from "@/lib/types";
 
 /**
@@ -104,7 +105,17 @@ export async function decodeConversation(encoded: string): Promise<SharedConvers
   ) {
     return null;
   }
-  return parsed as SharedConversation;
+
+  const conversation = parsed as SharedConversation;
+  return {
+    ...conversation,
+    turns: conversation.turns.map((turn) => ({
+      ...turn,
+      ...(turn.r === "ai" ? { c: localizeUtcTimestamps(turn.c) } : {}),
+      ...(turn.s ? { s: turn.s.map((line) => localizeUtcTimestamps(line)) } : {}),
+      ...(turn.l ? { l: localizeUtcTimestamps(turn.l) } : {}),
+    })),
+  };
 }
 
 /** One answer packed for the print/PDF view — carries the question it answered, too. */
@@ -155,7 +166,14 @@ export async function decodeReport(encoded: string): Promise<PrintableReport | n
   ) {
     return null;
   }
-  return parsed as PrintableReport;
+
+  const report = parsed as PrintableReport;
+  return {
+    ...report,
+    c: localizeUtcTimestamps(report.c),
+    ...(report.s ? { s: report.s.map((line) => localizeUtcTimestamps(line)) } : {}),
+    ...(report.l ? { l: localizeUtcTimestamps(report.l) } : {}),
+  };
 }
 
 export async function buildShareUrl(messages: ChatMessage[], origin: string): Promise<string> {

@@ -1,6 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
+import { localizeUtcTimestamps } from "@/lib/date-time";
 import type { ChatMessage } from "@/lib/types";
 import { TypingIndicator } from "./typing-indicator";
 import { MarketIndicatorCard } from "./market-indicator-card";
@@ -27,6 +28,11 @@ export function MessageBubble({ message, messages }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isPendingFirstToken = !isUser && message.streaming && !message.content;
   const isComplete = !isUser && !message.streaming && Boolean(message.content);
+  const localizedContent = isUser ? message.content : localizeUtcTimestamps(message.content);
+  const localizedStageLog = message.stageLog?.map((line) => localizeUtcTimestamps(line));
+  const localizedDataLimitation = message.dataLimitation
+    ? localizeUtcTimestamps(message.dataLimitation)
+    : undefined;
 
   return (
     <div
@@ -35,7 +41,7 @@ export function MessageBubble({ message, messages }: MessageBubbleProps) {
       }`}
     >
       {!isUser && <MessageLabel />}
-      {!isUser && message.stageLog && message.stageLog.length > 0 && <StageLog lines={message.stageLog} />}
+      {!isUser && localizedStageLog?.length ? <StageLog lines={localizedStageLog} /> : null}
       {isPendingFirstToken ? (
         <TypingIndicator text={message.stage} />
       ) : (
@@ -50,20 +56,20 @@ export function MessageBubble({ message, messages }: MessageBubbleProps) {
             remarkPlugins={[remarkGfm, remarkBreaks]}
             components={markdownComponents({ isUser })}
           >
-            {message.content}
+            {localizedContent}
           </ReactMarkdown>
           {!isUser && message.streaming && (
             <span className="ml-0.5 inline-block h-[14px] w-[2px] translate-y-0.5 animate-pulse-dot bg-ink-gain" />
           )}
         </div>
       )}
-      {!isUser && !message.streaming && message.dataLimitation && (
+      {!isUser && !message.streaming && localizedDataLimitation && (
         <div className="flex w-full items-start gap-2 rounded-lg border border-ink-accent/30 bg-ink-accent/5 px-3 py-2 text-xs leading-relaxed text-ink-fg-secondary">
           <span className="text-ink-accent">⚠</span>
           <span>
             <span className="font-bold text-ink-accent">資料限制</span>
             <span className="mx-1.5 text-ink-fg-muted">·</span>
-            {message.dataLimitation}
+            {localizedDataLimitation}
           </span>
         </div>
       )}

@@ -1,3 +1,4 @@
+import { localizeUtcTimestamps } from "@/lib/date-time";
 import type { ChatMessage } from "@/lib/types";
 
 const TITLE = "HOYA BIT AI — 加密市場分析";
@@ -13,18 +14,20 @@ export function buildReportMarkdown(message: ChatMessage, now = new Date()): str
 
   if (message.relatedSymbol) parts.push(`> 標的：${message.relatedSymbol}`);
 
-  parts.push("---", message.content.trim());
+  parts.push("---", localizeUtcTimestamps(message.content.trim()));
 
   if (message.stageLog?.length) {
     parts.push(
       "---",
       "## 推理軌跡",
-      message.stageLog.map((line, i) => `${i + 1}. ${line}`).join("\n")
+      message.stageLog
+        .map((line, i) => `${i + 1}. ${localizeUtcTimestamps(line)}`)
+        .join("\n")
     );
   }
 
   if (message.dataLimitation) {
-    parts.push("---", "## 資料限制", message.dataLimitation);
+    parts.push("---", "## 資料限制", localizeUtcTimestamps(message.dataLimitation));
   }
 
   const indicator = message.marketIndicator;

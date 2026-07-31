@@ -19,7 +19,7 @@ export function MessageList({ messages }: MessageListProps) {
     <div className="flex-1 overflow-y-auto p-4 md:p-8">
       <div className="flex flex-col gap-5">
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble key={message.id} message={message} messages={messages} />
         ))}
         <div ref={bottomRef} />
       </div>

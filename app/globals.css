@@ -34,6 +34,107 @@ body {
   font-family: var(--font-body);
 }
 
+/*
+ * The print/PDF report is the one light-theme surface, so it has to undo the
+ * dark background the root layout sets on <body>.
+ */
+.report-page {
+  color-scheme: light;
+}
+body:has(.report-page) {
+  background: #fff;
+}
+
+.report-body h1,
+.report-body h2 {
+  margin: 1.5rem 0 0.6rem;
+  border-bottom: 1px solid #d4d4d4;
+  padding-bottom: 0.3rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.report-body h3 {
+  margin: 1.2rem 0 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.report-body h1:first-child,
+.report-body h2:first-child,
+.report-body h3:first-child {
+  margin-top: 0;
+}
+.report-body p {
+  margin-bottom: 0.7rem;
+}
+.report-body ul,
+.report-body ol {
+  margin-bottom: 0.7rem;
+  padding-left: 1.4rem;
+}
+.report-body ul {
+  list-style: disc;
+}
+.report-body ol {
+  list-style: decimal;
+}
+.report-body li {
+  margin-bottom: 0.25rem;
+}
+.report-body strong {
+  font-weight: 700;
+}
+.report-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.7rem;
+  font-size: 0.8rem;
+}
+.report-body th,
+.report-body td {
+  border: 1px solid #d4d4d4;
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+}
+.report-body blockquote {
+  margin-bottom: 0.7rem;
+  border-left: 3px solid #d4d4d4;
+  padding-left: 0.8rem;
+  color: #525252;
+}
+.report-body code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+.report-body h1,
+.report-body h2,
+.report-body h3 {
+  break-after: avoid;
+}
+
+@page {
+  size: A4;
+  margin: 16mm 14mm;
+}
+
+@media print {
+  html,
+  body {
+    display: block;
+    height: auto;
+    min-height: 0;
+    background: #fff !important;
+  }
+  /* min-h-screen resolves to a full page height, which pads the report out
+     with a trailing blank page. */
+  .report-page {
+    min-height: 0;
+    /* Chrome drops backgrounds and colours by default, which would erase the
+       accent bars that carry the report's structure. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
 @keyframes pulse-dot {
   0%,
   100% {

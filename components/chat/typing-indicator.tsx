@@ -9,12 +9,12 @@ export function TypingIndicator({ text = "分析中..." }: TypingIndicatorProps)
         {[0, 0.2, 0.4].map((delay) => (
           <span
             key={delay}
-            className="h-1.5 w-1.5 animate-typing-bounce rounded-full bg-ink-fg-muted"
+            className="h-2 w-2 animate-typing-bounce rounded-full bg-ink-accent"
             style={{ animationDelay: `${delay}s` }}
           />
         ))}
       </div>
-      <span className="text-xs text-ink-fg-muted">{text}</span>
+      <span className="text-[13px] font-medium text-ink-fg-secondary">{text}</span>
     </div>
   );
 }

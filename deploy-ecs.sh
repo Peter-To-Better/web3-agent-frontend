@@ -283,7 +283,7 @@ done
 docker info >/dev/null 2>&1 || die "Docker daemon is not available. Start Docker Desktop or OrbStack first."
 
 log "Building Docker image"
-docker build --platform "$BUILD_PLATFORM" --tag "$IMAGE_URI" .
+docker build --network host --platform "$BUILD_PLATFORM" --tag "$IMAGE_URI" .
 
 log "Authenticating Docker to ECR"
 aws_read ecr get-login-password | docker login \

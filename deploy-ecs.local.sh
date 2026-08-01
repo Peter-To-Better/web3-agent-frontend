@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-AWS_PROFILE="${AWS_PROFILE:-poc}"
+AWS_PROFILE="${AWS_PROFILE-}"
 AWS_REGION="${AWS_REGION:-ap-northeast-1}"
 ECR_REPOSITORY="${ECR_REPOSITORY:-hoya-bit-frontend}"
 ECS_CLUSTER="${ECS_CLUSTER:-hoya-bit-frontend}"

@@ -1,10 +1,10 @@
 import "server-only";
 import type { MarketDashboardData, MarketRankingRow, RecommendationRow, TickerQuote } from "@/lib/types";
 
-const SPOT_BASE = "https://api.binance.com";
+const SPOT_BASE = "https://api.binance.us";
 const FUTURES_BASE = "https://fapi.binance.com";
 const TOP_N = 5;
-const MIN_QUOTE_VOLUME_USDT = 5_000_000;
+const MIN_QUOTE_VOLUME_USDT = 50_000;
 const RSI_PERIOD = 14;
 const KLINE_INTERVAL = "1h";
 const KLINE_LIMIT = 100;

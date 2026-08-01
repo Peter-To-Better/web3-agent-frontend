@@ -145,6 +145,21 @@ aws_read() {
   return "$exit_code"
 }
 
+# Idempotent Docker registry operations (login, push) may be retried safely;
+# the local docker daemon's outbound connection to the registry is less
+# reliable than the shell's, independent of --network on docker build/run.
+retry_cmd() {
+  local attempt=1
+  until "$@"; do
+    if (( attempt >= 3 )); then
+      return 1
+    fi
+    warn "Command failed (attempt $attempt/3): $*; retrying in 3 seconds."
+    sleep 3
+    attempt=$((attempt + 1))
+  done
+}
+
 log "Checking AWS identity and deployment resources"
 if ! ACCOUNT_ID="$(aws_read sts get-caller-identity --query Account --output text 2>/dev/null)"; then
   die "AWS login is unavailable. Run: aws sso login --profile $AWS_PROFILE"
@@ -286,12 +301,16 @@ log "Building Docker image"
 docker build --network host --platform "$BUILD_PLATFORM" --tag "$IMAGE_URI" .
 
 log "Authenticating Docker to ECR"
-aws_read ecr get-login-password | docker login \
-  --username AWS \
-  --password-stdin "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+ECR_LOGIN_PASSWORD="$(aws_read ecr get-login-password)"
+ecr_login() {
+  printf '%s' "$ECR_LOGIN_PASSWORD" | docker login \
+    --username AWS \
+    --password-stdin "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+}
+retry_cmd ecr_login || die "Docker login to ECR failed after retries"
 
 log "Pushing immutable image tag"
-docker push "$IMAGE_URI"
+retry_cmd docker push "$IMAGE_URI" || die "Docker push to ECR failed after retries"
 
 IMAGE_DIGEST="$(aws_read ecr describe-images \
   --repository-name "$ECR_REPOSITORY" \

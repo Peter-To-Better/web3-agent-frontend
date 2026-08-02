@@ -22,9 +22,16 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    # arm64 runner (free for public repos): deploy-ecs.sh builds for the ECS
+    # task's cpuArchitecture, which is ARM64 — building that on the default
+    # x86_64 runner fails with "exec format error".
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
+
+      # Safety net: lets docker build cross-compile if the ECS task ever
+      # switches back to X86_64.
+      - uses: docker/setup-qemu-action@v3
 
       - name: Pick credential mode
         id: creds

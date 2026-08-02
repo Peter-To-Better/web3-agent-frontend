@@ -1,41 +1,56 @@
+---
+inclusion: always
+---
+
 # Structure
 
+## 目錄責任
+
+```text
+app/                         Next.js App Router 頁面、layout、全域樣式與 Route Handlers
+  api/chat/stream/           POST SSE proxy；AgentCore 或本地 mock
+  api/chat/history/          GET REST proxy；backend 或 mock history
+  api/market/dashboard/      GET Binance 聚合資料，無 mock
+  api/market/symbol/         GET 單一幣種資料，無 mock
+  chat/ dashboard/           互動聊天與市場頁
+  report/ share/             從 URL fragment 還原資料的頁面
+  fonts/                     自架 Noto Sans TC、JetBrains Mono
+components/                  UI 元件，依 chat/common/dashboard/home/layout/tour 分域
+hooks/                       client hooks，例如 use-chat、use-live-prices
+lib/
+  api/                       browser HTTP、REST、SSE client 封裝
+  agent-token.ts             Agent token 的 browser storage/header
+  chat-export.ts             報告與分享匯出入口
+  share-link.ts              fragment 壓縮、編碼與解碼
+  market-data.ts             server-only Binance REST 聚合
+  fear-greed.ts              server-only Fear & Greed 資料
+  coin-symbols.ts            幣種辨識與 metadata
+  date-time.ts               共用日期時間格式
+  feature-tour.ts            tour 狀態與版本
+  gsap.ts                    GSAP plugin 註冊與 reduced-motion helper
+  types.ts                   跨領域共用型別
+  *-data.ts(x)               靜態文案、導覽與 mock/display data
+public/                      靜態資源；即使為空也保留 `.gitkeep` 供 Docker COPY
 ```
-app/                    頁面與 API Route Handlers(Next.js App Router)
-  api/chat/stream/      SSE proxy → AGENT_FUNCTION_URL(未設定時回 mock 串流)
-  api/chat/history/     REST proxy → BACKEND_URL(未設定時回 mock 歷史)
-  api/market/           Binance.US spot / Binance futures 公開 API proxy
-  chat/ dashboard/ report/ share/   各頁面(page.tsx)
-  fonts/                自架字型(Noto Sans TC、JetBrains Mono woff)
-components/             UI 元件,依頁面/領域分子目錄
-  chat/                 聊天相關(message-bubble、chat-input、sidebar…)
-  dashboard/            儀表板(market-panel、sentiment-gauge…)
-  home/                 Landing page 各區塊
-  layout/               navbar、footer、top-bar
-  common/               跨頁共用(button、logo、reveal、scramble-text…)
-  tour/                 react-joyride 功能導覽
-hooks/                  React hooks(use-chat、use-live-prices)
-lib/                    資料層與工具
-  api/                  HTTP/SSE client 封裝(http.ts、rest.ts、sse.ts)
-  *-data.ts(x)          各頁面的靜態文案與 mock 資料
-  types.ts              共用型別
-public/                 靜態資源(目前為空,.gitkeep 佔位 — Dockerfile 需要它存在)
-```
 
-## 命名慣例
+## 命名與 import
 
-- `components/`、`hooks/` 檔名一律 **kebab-case**(`message-bubble.tsx`、
-  `use-chat.ts`);檔案內匯出符號維持 PascalCase/camelCase
-  (`export function MessageBubble`)。
-- 例外:Next.js App Router 保留檔名(`page.tsx`、`layout.tsx`、`route.ts`、
-  `loading.tsx`、`error.tsx` 等)與 `globals.css` 必須維持原名,改名會壞路由。
-- 每個 components 子目錄有 `index.ts` barrel,新增元件記得補 export。
-- Import 用 `@/` path alias(對應 repo 根目錄)。
+- `components/`、`hooks/` 檔名使用 kebab-case；匯出元件用 PascalCase，hook/function 用 camelCase。
+- Next.js App Router 保留檔名（`page.tsx`、`layout.tsx`、`route.ts`、`loading.tsx`、`error.tsx` 等）與 `globals.css` 不可改名。
+- 每個 `components/<domain>/` 維持 `index.ts` barrel；新增、移除或搬動元件時同步 export。
+- 跨目錄或 repo-root 依賴使用 `@/` alias；同資料夾 sibling 與 barrel 內部使用 `./...`，不要為了形式強制改成 alias。
+- 程式碼沿用雙引號、分號與 2-space indentation。
 
-## 架構原則
+## Server / client 邊界
 
-- 外部服務(Lambda、後端、交易所 API)一律由 `app/api/*` Route Handler
-  在伺服器端代理;瀏覽器只打同源 API。機密環境變數不加 `NEXT_PUBLIC_`。
-- 每個 proxy route 都有 mock fallback:對應環境變數未設定時回傳內建假資料。
-  新增 proxy route 時遵循同樣模式。
-- 動畫統一走 GSAP(`lib/gsap.ts` 註冊 plugin),React 內用 `useGSAP`。
+- page/layout 預設維持 Server Component。只有使用 React client hooks、DOM、`window`、localStorage、WebSocket、GSAP、Joyride 或 URL hash 時才加入 `"use client"`。
+- server page 先取得可快取的初始資料，再以 serializable props 交給小型 client island；不要把 server-only module 拉進 client graph。
+- `lib/market-data.ts` 與 `lib/fear-greed.ts` 使用 `server-only`，只能由 Server Component 或 Route Handler 引用。
+- 外部 REST、SSE 與需要秘密的服務由 `app/api/*` 代理，browser 呼叫同源 API。Binance 公開 WebSocket 是目前明確的 client-side 例外。
+- mock fallback 只存在 chat stream/history；market routes 沒有 mock。新增 fallback 前先確認產品需求，不要假設每個 proxy 都應回假資料。
+
+## UI 與動畫邊界
+
+- 複雜進場、scroll/scrub、scramble 與需要 cleanup 的動畫使用 `lib/gsap.ts` + `useGSAP`，設定 scope 並尊重 `prefersReducedMotion()`。
+- ticker、caret、pulse、typing 等小型循環效果可使用 `app/globals.css` keyframes；不得把「所有動畫都用 GSAP」當成現況。
+- design token、print 規則與全域 animation 位於 `app/globals.css`；不要新增 Tailwind config 來重複定義。

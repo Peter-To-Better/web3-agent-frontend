@@ -41,11 +41,3 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# terraform
-terraform/.terraform/
-terraform/*.tfstate
-terraform/*.tfstate.*
-terraform/terraform.tfvars
-terraform/*.tfplan
-crash.log
-crash.*.log

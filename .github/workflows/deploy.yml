@@ -1,0 +1,83 @@
+name: Deploy to ECS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: "ECR image tag (must be new — the repo uses immutable tags). Empty = auto-generate."
+        required: false
+        default: ""
+
+# Never run two deploys at once; queue instead of cancelling so a deploy
+# already updating the ECS service is never interrupted midway.
+concurrency:
+  group: deploy-ecs
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # for the OIDC credential mode
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick credential mode
+        id: creds
+        env:
+          ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        run: |
+          if [ -n "$ROLE_ARN" ]; then
+            echo "mode=oidc" >> "$GITHUB_OUTPUT"
+          elif [ -n "$ACCESS_KEY_ID" ]; then
+            echo "mode=keys" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::No AWS credentials configured. Set the AWS_ROLE_ARN secret (OIDC, preferred) or AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (+ optional AWS_SESSION_TOKEN) secrets. See README > CI/CD."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC role)
+        if: steps.creds.outputs.mode == 'oidc'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
+
+      # Fallback for accounts where an OIDC role cannot be created (e.g. lab /
+      # sandbox accounts that only hand out temporary session credentials).
+      # Session credentials expire within hours — re-set the three secrets
+      # before each deploy, or switch to OIDC as soon as you can.
+      - name: Configure AWS credentials (static keys)
+        if: steps.creds.outputs.mode == 'keys'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Deploy
+        env:
+          # Empty on purpose: use the ambient credentials configured above
+          # instead of a local AWS profile.
+          AWS_PROFILE: ""
+          AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'hoya-bit-frontend' }}
+          ECS_CLUSTER: ${{ vars.ECS_CLUSTER || 'hoya-bit-frontend' }}
+          ECS_SERVICE: ${{ vars.ECS_SERVICE || 'hoya-bit-frontend' }}
+          INPUT_TAG: ${{ inputs.image-tag }}
+        run: |
+          TAG="$INPUT_TAG"
+          if [ -z "$TAG" ]; then
+            TAG="gha-${{ github.run_number }}-${GITHUB_SHA::7}"
+          fi
+          ./deploy-ecs.sh "$TAG"

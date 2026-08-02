@@ -1,5 +1,12 @@
 # AWS ECS Fargate → Lambda → AgentCore 部署流程
 
+> **文件現況（2026-08-02）**：本文件是最初的架構規劃與基礎設施建置手冊，其中兩點與目前實際部署不同：
+>
+> 1. **Region** — 文件以東京 `ap-northeast-1` 為準；目前 Workshop 帳號的 ECR / ECS / ALB 實際建在 **`us-west-2`**（CI/CD 由 GitHub repo variable `AWS_REGION` 控制）。閱讀時將區域自行代換。
+> 2. **Lambda 呼叫方式** — 文件規劃 ECS 以 Task Role 私下 `InvokeWithResponseStream` 呼叫 Lambda（第 9 節）；目前實作是 `/api/chat/stream` 直接呼叫**公開 Lambda Function URL**（`AGENT_FUNCTION_URL` + verify token，見 `.env.example`）。第 9 節描述的仍是正式環境的目標架構。
+>
+> 其餘章節（資源建置順序、IAM 最小權限、ALB/SSE 設定、排錯表、部署與回滾）仍然有效——這是從零重建整套基礎設施的唯一紀錄，Workshop 帳號到期重開時會用到。日常部署改由 GitHub Actions 自動執行（見 README 的 CI/CD 一節），本文件第 16 節的 `deploy-ecs.sh` 為手動備援。
+
 本文件說明如何將此 Next.js 前端部署到 Amazon ECS Fargate，並由 ECS 上的 Next.js 伺服器端私下呼叫 Lambda 過濾層，再由 Lambda 呼叫 Amazon Bedrock AgentCore Runtime。瀏覽器不直接接觸 Lambda、AgentCore、AWS 憑證或真正的後端端點。
 
 ## 1. 目標架構

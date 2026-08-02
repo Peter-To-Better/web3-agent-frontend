@@ -6,7 +6,12 @@ cd "$SCRIPT_DIR"
 
 # Unset defaults to the local "poc" profile; explicitly empty (CI) makes the
 # AWS CLI use ambient credentials (env vars / OIDC) with no --profile flag.
-AWS_PROFILE="${AWS_PROFILE-poc}"
+# Rebuilt as a non-exported shell variable because the AWS CLI aborts with
+# "The config profile () could not be found" when it inherits an exported
+# empty AWS_PROFILE, without ever falling back to env-var credentials.
+AWS_PROFILE_INPUT="${AWS_PROFILE-poc}"
+unset AWS_PROFILE
+AWS_PROFILE="$AWS_PROFILE_INPUT"
 AWS_REGION="${AWS_REGION:-ap-northeast-1}"
 ECR_REPOSITORY="${ECR_REPOSITORY:-hoya-bit-frontend}"
 ECS_CLUSTER="${ECS_CLUSTER:-hoya-bit-frontend}"
